@@ -36,7 +36,9 @@ import {
 
 import { dbService } from './services/db';
 import { syncService, SyncStatus } from './services/syncService';
-import { generateHEDSReportPDF } from './services/pdfReportGenerator';
+import { generateHEDSReportPDF, generateHEDSManualPDF } from './services/pdfReportGenerator';
+import { cfdSolver } from './services/cfdEngine';
+import { ScenarioEngineFormConfig } from './types';
 
 import { TopBar } from './components/TopBar';
 import { NavigationSidebar, ActiveSidebarTab } from './components/NavigationSidebar';
@@ -48,6 +50,9 @@ import { PatientsCrudModal } from './components/PatientsCrudModal';
 import { ScenariosCatalogModal } from './components/ScenariosCatalogModal';
 import { EvaluationModal } from './components/EvaluationModal';
 import { ConfigSyncModal } from './components/ConfigSyncModal';
+import { ScenarioEngineModal } from './components/ScenarioEngineModal';
+import { HospitalProtectionConfigModal } from './components/HospitalProtectionConfigModal';
+import { ReferenceBenchmarksModal } from './components/ReferenceBenchmarksModal';
 
 import {
   Play,
@@ -65,7 +70,10 @@ import {
   AlertTriangle,
   Building,
   CheckCircle2,
-  FileCode
+  FileCode,
+  Wand2,
+  ShieldCheck,
+  BookOpen
 } from 'lucide-react';
 
 export default function App() {
@@ -81,6 +89,9 @@ export default function App() {
   const [isScenariosModalOpen, setIsScenariosModalOpen] = useState(false);
   const [isEvaluationModalOpen, setIsEvaluationModalOpen] = useState(false);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+  const [isScenarioEngineModalOpen, setIsScenarioEngineModalOpen] = useState(false);
+  const [isHospitalProtectionModalOpen, setIsHospitalProtectionModalOpen] = useState(false);
+  const [isReferenceBenchmarksModalOpen, setIsReferenceBenchmarksModalOpen] = useState(false);
 
   // Entities Data
   const [hospital, setHospital] = useState<Hospital>(INITIAL_HOSPITAL);
@@ -266,7 +277,7 @@ export default function App() {
       simulatedTimeStr: simulatedTime,
       category: 'DECISAO',
       title: `Decisão Tomada: [${option.letter}] ${option.label.substring(0, 45)}...`,
-      description: csq.description,
+      description: csq.description || option.pedagogicalRationale || option.label,
       severity: option.isOptimal ? 'sucesso' : 'alerta'
     };
     setSimulationLogs((prev) => [...prev, logItem]);
@@ -350,6 +361,168 @@ export default function App() {
     setFinalReport(report);
     dbService.put('reports', report);
     setIsEvaluationModalOpen(true);
+  };
+
+  // Helper to compile current or final report data for immediate PDF generation
+  const compileCurrentReportData = (): ReportData => {
+    if (finalReport) return finalReport;
+
+    const totalDecisions = decisionsHistory.length || 1;
+    const optimalCount = decisionsHistory.filter((d) => d.isOptimal).length;
+    const overallScore = Math.min(100, Math.round((optimalCount / totalDecisions) * 100) + 15);
+
+    const gradeClassification =
+      overallScore >= 85
+        ? 'Excelente (Comando Exemplar)'
+        : overallScore >= 70
+        ? 'Satisfatório (Comando Adequado)'
+        : overallScore >= 50
+        ? 'Atenção (Falhas Táticas)'
+        : 'Crítico (Risco Extremo)';
+
+    const evalResult: EvaluationResult = {
+      overallScore,
+      gradeClassification,
+      decisionTimeScore: Math.min(100, 95 - Math.floor(elapsedSeconds / 30)),
+      lifeProtectionScore: isNorthStairBlocked ? 94 : 88,
+      patientSafetyScore: 92,
+      coordinationScore: 89,
+      resourceUsageScore: 86,
+      communicationScore: 91,
+      continuityScore: 85,
+      evacuatedTotal: patients.filter((p) => p.status === 'evacuado_seguro' || p.status === 'em_area_refugio').length,
+      criticalSaved: patients.filter((p) => p.category === 'P4' && p.status !== 'critico').length,
+      patientsExposed: patients.filter((p) => p.status === 'exposto_risco').length,
+      routesBlockedCount: isNorthStairBlocked ? 1 : 0,
+      evaluatorNotes: 'Auditoria técnica realizada pelo Sistema HEDS. Decisões táticas avaliadas com base na doutrina HEICS e tenibilidade CFD.',
+      recommendations: [
+        'Manter treinamento semestral de evacuação horizontal para Áreas de Refúgio.',
+        'Checar mensalmente as baterias do sistema de pressurização de escadas.',
+        'Garantir rota desobstruída para transporte simultâneo de leitos P3 e P4.'
+      ]
+    };
+
+    const repNum = 'HEDS-2026-' + Math.floor(1000 + Math.random() * 9000);
+    return {
+      id: repNum,
+      reportNumber: repNum,
+      generatedAt: new Date().toISOString(),
+      participantName: 'Comandante de Incidente / Aluno HEDS',
+      instructorName: 'Instrutor Chefe de Emergência Hospitalar',
+      hospitalName: hospital.name,
+      scenarioTitle: activeScenario.title,
+      simulationDurationSec: Math.max(elapsedSeconds, 120),
+      evaluation: evalResult,
+      timeline: simulationLogs,
+      decisions: decisionsHistory,
+      patientsStatusSummary: {
+        total: patients.length,
+        evacuated: evalResult.evacuatedTotal,
+        inRefuge: patients.filter((p) => p.status === 'em_area_refugio').length,
+        inBed: patients.filter((p) => p.status === 'em_leito').length,
+        exposed: evalResult.patientsExposed
+      }
+    };
+  };
+
+  const handleGenerateManualPDF = () => {
+    const doc = generateHEDSManualPDF(hospital);
+    doc.save(`Manual_HEDS_Doutrina_Emergencia_${hospital.code}.pdf`);
+  };
+
+  const handleGenerateReportPDF = () => {
+    const reportToUse = compileCurrentReportData();
+    const doc = generateHEDSReportPDF(reportToUse);
+    doc.save(`Relatorio_Oficial_HEDS_${reportToUse.reportNumber}.pdf`);
+  };
+
+  // Motor de Cenários: Apply dynamically generated scenario to simulator
+  const handleApplyDynamicScenario = (newScenario: Scenario, formConfig: ScenarioEngineFormConfig) => {
+    setActiveScenario(newScenario);
+    setCurrentEventIndex(0);
+    setPendingEvent(newScenario.events[0] || null);
+    setElapsedSeconds(0);
+    setDecisionsHistory([]);
+    setSelectedFloorId(formConfig.floorId);
+    setEmergencyLevel('amarelo_alerta');
+
+    // Configure CFD solver with injected failures
+    cfdSolver.elapsedSec = 0;
+    cfdSolver.sprinklersSuppression = !formConfig.sprinklerUnavailable;
+    cfdSolver.isStairADoorOpen = formConfig.stairABlocked;
+    cfdSolver.stairPressurizationActive = !formConfig.pressurizationFailure;
+    cfdSolver.smokeExtractionActive = !formConfig.smokeExtractionFailure;
+    cfdSolver.initializeMesh();
+    cfdSolver.initializeProbes();
+
+    setIsNorthStairBlocked(formConfig.stairABlocked);
+
+    // Generate dynamic patient distribution matching the requested counts
+    const newPatientsList: Patient[] = [];
+    const targetFloorRooms = rooms.filter(r => r.floorId === formConfig.floorId && r.capacityBeds > 0);
+    let roomIdx = 0;
+
+    const namesPool = [
+      'Carlos Alberto', 'Maria das Dores', 'Antônio Silva', 'Helena Ramos', 
+      'João Paulo', 'Beatriz Lima', 'Francisco Souza', 'Teresa Cristina', 
+      'Roberto Gomes', 'Ana Paula', 'Luís Eduardo', 'Patrícia Mendes', 
+      'Cláudio Ferreira', 'Rita de Cássia', 'Gabriel Martins'
+    ];
+
+    let patIdCounter = 1;
+    const categoriesList: ('P0' | 'P1' | 'P2' | 'P3' | 'P4')[] = [
+      ...Array(formConfig.patientsP4).fill('P4'),
+      ...Array(formConfig.patientsP3).fill('P3'),
+      ...Array(formConfig.patientsP2).fill('P2'),
+      ...Array(formConfig.patientsP1).fill('P1'),
+      ...Array(formConfig.patientsP0).fill('P0')
+    ];
+
+    categoriesList.forEach((cat, idx) => {
+      const assignedRoom = targetFloorRooms[roomIdx % Math.max(1, targetFloorRooms.length)];
+      roomIdx++;
+
+      newPatientsList.push({
+        id: `pat-dyn-${patIdCounter++}`,
+        fictionalName: namesPool[idx % namesPool.length] + ` (Leito ${idx + 1})`,
+        age: 35 + ((idx * 7) % 50),
+        floorId: formConfig.floorId,
+        roomNumber: assignedRoom ? assignedRoom.roomNumber : formConfig.originRoomNumber,
+        category: cat,
+        mobilityStatus: cat === 'P0' ? 'autonomo' : cat === 'P1' ? 'auxilio_leve' : cat === 'P2' ? 'cadeirante' : cat === 'P3' ? 'acamado' : 'instavel',
+        consciousnessLevel: cat === 'P4' ? 'sedado' : 'alerta',
+        clinicalCondition: cat === 'P4' ? 'UTI - Pós-op imediato em Ventilação Mecânica' : cat === 'P3' ? 'Acamado - Tração Ortopédica / Acesso Central' : cat === 'P2' ? 'Cadeirante - AVC prévio' : 'Enfermaria Geral',
+        needsOxygen: cat === 'P4' || cat === 'P3',
+        needsMechanicalVentilator: cat === 'P4',
+        needsInfusionPumps: cat === 'P4',
+        needsVitalMonitor: cat === 'P4' || cat === 'P3',
+        preparationTimeSec: cat === 'P4' ? 180 : cat === 'P3' ? 90 : 30,
+        assignedStaffCount: cat === 'P4' ? 4 : cat === 'P3' ? 3 : cat === 'P2' ? 2 : 1,
+        status: 'em_leito',
+        destinationRefuge: 'Área de Refúgio Leste (P-90)',
+        exposureSmokeSeconds: 0,
+        vitalStabilityPercent: 100
+      });
+    });
+
+    if (newPatientsList.length > 0) {
+      setPatients(newPatientsList);
+    }
+
+    setSimulationStatus('em_andamento');
+    setActiveTab('simulacao');
+
+    setSimulationLogs([
+      {
+        id: 'log-dyn-0',
+        timestampSec: 0,
+        simulatedTimeStr: '10:20:00',
+        category: 'DETECCAO',
+        title: `Início do Exercício Dinâmico: ${newScenario.title}`,
+        description: `Motor de Cenários inicializado. ${formConfig.totalPatientsCount} pacientes alocados no ${formConfig.floorId}º Pavimento. Foco em ${formConfig.originRoomName}.`,
+        severity: 'critico'
+      }
+    ]);
   };
 
   // Dispatch Team Action
@@ -444,6 +617,8 @@ export default function App() {
         onEndSimulation={handleCompleteSimulation}
         onTriggerSync={() => syncService.triggerSync()}
         onChangeMode={setMode}
+        onGenerateManualPDF={handleGenerateManualPDF}
+        onGenerateReportPDF={handleGenerateReportPDF}
       />
 
       {/* Main View Area: Left Sidebar + Center Workspace + Right Status Panel */}
@@ -453,11 +628,16 @@ export default function App() {
           activeTab={activeTab}
           onSelectTab={(tab) => {
             setActiveTab(tab);
+            if (tab === 'motor_cenarios') setIsScenarioEngineModalOpen(true);
+            if (tab === 'protecao_incendio' || tab === 'hospital' || tab === 'pavimentos' || tab === 'edificacao' || tab === 'ambientes') {
+              setIsHospitalProtectionModalOpen(true);
+            }
             if (tab === 'pacientes') setIsPatientsModalOpen(true);
             if (tab === 'cenarios') setIsScenariosModalOpen(true);
             if (tab === 'configuracoes') setIsConfigModalOpen(true);
-            if (tab === 'avaliacao' && finalReport) setIsEvaluationModalOpen(true);
-            if (tab === 'relatorios' && finalReport) setIsEvaluationModalOpen(true);
+            if (tab === 'avaliacao') setIsEvaluationModalOpen(true);
+            if (tab === 'relatorios') handleGenerateReportPDF();
+            if (tab === 'referencias_benchmarks') setIsReferenceBenchmarksModalOpen(true);
           }}
           patientsCount={patients.length}
           criticalEventsCount={activeScenario.events.length}
@@ -484,6 +664,7 @@ export default function App() {
                 smokeSpreadLevel={smokeSpreadLevel}
                 isNorthStairBlocked={isNorthStairBlocked}
                 selectedRoomId={selectedRoom?.id}
+                onOpenReferences={() => setIsReferenceBenchmarksModalOpen(true)}
               />
             </div>
           ) : activeTab === 'comando_c3' ? (
@@ -505,11 +686,19 @@ export default function App() {
             // Fallback content card for structural views
             <div className="flex-1 bg-slate-900 border border-slate-800 rounded-xl p-6 overflow-y-auto">
               <div className="max-w-4xl space-y-4">
-                <h2 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                  <Building className="w-5 h-5 text-cyan-400" /> Detalhamento Estrutural: {activeTab.toUpperCase()}
-                </h2>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                    <Building className="w-5 h-5 text-cyan-400" /> Detalhamento Estrutural: {activeTab.toUpperCase()}
+                  </h2>
+                  <button
+                    onClick={() => setIsHospitalProtectionModalOpen(true)}
+                    className="px-3 py-1.5 bg-rose-600/30 text-rose-300 border border-rose-500/40 rounded-lg text-xs font-bold hover:bg-rose-600/40 transition flex items-center gap-1.5"
+                  >
+                    <ShieldCheck className="w-4 h-4" /> Configurar Checklist 15 Sistemas
+                  </button>
+                </div>
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  O complexo hospitalar conta com 5 pavimentos estruturados em alvenaria e concreto armado, sistema de pressurização mecânica de escadas, redes de hidrantes e sprinklers automáticos, além de áreas de refúgio compartimentadas com resistência ao fogo de 120 minutos (TRRF 120 min).
+                  O complexo hospitalar conta com 6 pavimentos estruturados em alvenaria e concreto armado, pé-direito padrão de 3.5m, sistema de pressurização mecânica de escadas (+50 Pa), redes de hidrantes e sprinklers automáticos, além de áreas de refúgio compartimentadas com resistência ao fogo de 120 minutos (TRRF 120 min).
                 </p>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
@@ -524,11 +713,11 @@ export default function App() {
                     >
                       <div className="flex items-center justify-between text-xs mb-1">
                         <span className="font-bold text-white">{flr.name}</span>
-                        <span className="text-[10px] text-cyan-400 font-mono">{flr.areaM2} m²</span>
+                        <span className="text-[10px] text-cyan-400 font-mono">{flr.areaM2} m² | Pé-direito: {flr.floorHeightM || 3.5}m</span>
                       </div>
                       <p className="text-xs text-slate-400">{flr.purpose}</p>
                       <div className="mt-2 text-[10px] text-slate-500 flex items-center justify-between">
-                        <span>{flr.roomsCount} ambientes cadastrados</span>
+                        <span>TRRF: {flr.trrfRatingMin || 120} min | {flr.fireDoorsCount || 4} portas P-90</span>
                         <span className="text-cyan-400 font-semibold">Inspecionar em 3D →</span>
                       </div>
                     </div>
@@ -595,14 +784,45 @@ export default function App() {
         activeScenarioId={activeScenario.id}
       />
 
+      {/* Motor de Cenários Modal */}
+      <ScenarioEngineModal
+        isOpen={isScenarioEngineModalOpen}
+        onClose={() => setIsScenarioEngineModalOpen(false)}
+        floors={floors}
+        rooms={rooms}
+        onApplyScenario={handleApplyDynamicScenario}
+        onSaveScenarioToCatalog={(scen) => {
+          setActiveScenario(scen);
+          setIsScenarioEngineModalOpen(false);
+        }}
+      />
+
+      {/* Hospital Infrastructure & 15 Fire Protection Systems Checklist Modal */}
+      <HospitalProtectionConfigModal
+        isOpen={isHospitalProtectionModalOpen}
+        onClose={() => setIsHospitalProtectionModalOpen(false)}
+        hospital={hospital}
+        floors={floors}
+        rooms={rooms}
+        onSaveHospital={(updatedHosp, updatedFloors) => {
+          setHospital(updatedHosp);
+          setFloors(updatedFloors);
+          dbService.put('hospitals', updatedHosp);
+        }}
+      />
+
+      {/* Reference Benchmarks (Pathfinder & FDS) Modal */}
+      <ReferenceBenchmarksModal
+        isOpen={isReferenceBenchmarksModalOpen}
+        onClose={() => setIsReferenceBenchmarksModalOpen(false)}
+      />
+
       {/* Evaluation Results & PDF Report Modal */}
-      {finalReport && (
-        <EvaluationModal
-          report={finalReport}
-          isOpen={isEvaluationModalOpen}
-          onClose={() => setIsEvaluationModalOpen(false)}
-        />
-      )}
+      <EvaluationModal
+        report={finalReport || compileCurrentReportData()}
+        isOpen={isEvaluationModalOpen}
+        onClose={() => setIsEvaluationModalOpen(false)}
+      />
 
       {/* Configuration, Offline Sync & MySQL Schema Modal */}
       <ConfigSyncModal

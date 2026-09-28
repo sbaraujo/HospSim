@@ -46,6 +46,20 @@ export interface Patient {
   vitalStabilityPercent: number;
 }
 
+export interface FireProtectionSystemItem {
+  id: string;
+  orderNumber: number;
+  name: string;
+  code: string;
+  exists: boolean; // Se há ou não há no hospital
+  operationalStatus: 'operacional' | 'parcial' | 'em_manutencao' | 'inoperante';
+  standardRef: string; // Ex: ABNT NBR 17240, NBR 10897, NBR 14880, NFPA 99
+  coveragePercent: number;
+  locationScope: string;
+  cfdImpactDescription: string;
+  lastInspectionDate: string;
+}
+
 export interface Hospital {
   id: string;
   code: string;
@@ -55,11 +69,16 @@ export interface Hospital {
   city: string;
   state: string;
   floorsCount: number;
+  buildingHeightM: number;
+  floorHeightM: number;
   totalAreaM2: number;
+  totalBedsCount: number;
   maxOccupancy: number;
   hasHeliport: boolean;
   phoneEmergency: string;
   notes: string;
+  constructionClassification: string; // Ex: Edificação Hospitalar Tipo Z-2 / NBR 9077
+  fireProtectionChecklist?: FireProtectionSystemItem[];
 }
 
 export interface Floor {
@@ -67,6 +86,11 @@ export interface Floor {
   name: string;
   purpose: string;
   areaM2: number;
+  floorHeightM: number;
+  ceilingHeightM: number;
+  trrfRatingMin: number; // Tempo Requerido de Resistência ao Fogo em minutos (ex: 60, 90, 120)
+  hasCompartmentation: boolean;
+  fireDoorsCount: number;
   isAffected: boolean;
   roomsCount: number;
 }
@@ -144,9 +168,9 @@ export type HazardType =
   | 'multiplas_vitimas';
 
 export interface DecisionConsequence {
-  id: string;
-  type: 'positiva' | 'negativa' | 'atraso' | 'consumo_recurso' | 'perda_recurso' | 'agravamento_fogo' | 'bloqueio_rota' | 'exposicao_paciente' | 'reforco_necessario';
-  description: string;
+  id?: string;
+  type?: 'positiva' | 'negativa' | 'atraso' | 'consumo_recurso' | 'perda_recurso' | 'agravamento_fogo' | 'bloqueio_rota' | 'exposicao_paciente' | 'reforco_necessario' | string;
+  description?: string;
   scoreBonus: number;
   fireSpreadDelta: number;
   smokeSpreadDelta: number;
@@ -267,3 +291,97 @@ export type EmergencyLevel =
   | 'amarelo_alerta' 
   | 'laranja_emergencia_local' 
   | 'vermelho_evacuacao_geral';
+
+// ==========================================
+// CFD / FIRE DYNAMICS SIMULATOR (FDS) TYPES
+// ==========================================
+
+export type CFDVisualizationMode = 
+  | 'temperatura' 
+  | 'fumaca_visibilidade' 
+  | 'toxicidade_co' 
+  | 'vetores_escoamento' 
+  | 'pathfinder_rotas';
+
+export interface CFDGridCell {
+  x: number; // grid coordinate X (0 to cols-1)
+  y: number; // grid coordinate Y (0 to rows-1)
+  worldX: number;
+  worldZ: number;
+  tempC: number;
+  smokeOpticalDensity: number; // 1/m (extinction coefficient k)
+  visibilityM: number; // Visibility in meters = 3 / k
+  coPpm: number; // Carbon Monoxide ppm
+  fedToxicity: number; // Fractional Effective Dose (0 to >1.0 lethal)
+  uVel: number; // m/s X-direction
+  vVel: number; // m/s Y-direction
+  smokeLayerHeightM: number; // smoke layer descent from ceiling (m)
+  isWall: boolean;
+  isDoor: boolean;
+  isFireDoorClosed: boolean;
+  isVent: boolean;
+  isFireSource: boolean;
+  isSprinklerActive: boolean;
+  isRefugeZone: boolean;
+}
+
+export interface CFDProbeSensor {
+  id: string;
+  name: string;
+  locationLabel: string;
+  gridX: number;
+  gridY: number;
+  tempC: number;
+  visibilityM: number;
+  coPpm: number;
+  fedToxicity: number;
+  tenabilityStatus: 'tenivel' | 'alerta_moderado' | 'inabitavel_critico';
+  historyTemps: number[];
+  historyVisibilities: number[];
+}
+
+export interface CFDSimulationState {
+  stepCount: number;
+  elapsedSec: number;
+  currentHRRKw: number; // Heat Release Rate in kW (ex: 2500 kW = 2.5 MW)
+  peakTempC: number;
+  averageCorridorVisibilityM: number;
+  smokeExhaustFanActive: boolean;
+  stairPressurizationActive: boolean;
+  sprinklersTrippedCount: number;
+  fireDoorsSealedCount: number;
+  probes: CFDProbeSensor[];
+}
+
+// ==========================================
+// MOTOR DE CENÁRIOS (SCENARIO ENGINE) TYPES
+// ==========================================
+
+export interface ScenarioEngineFormConfig {
+  incidentType: 'incendio_estrutural' | 'incendio_uti_o2' | 'incendio_bloco_cirurgico' | 'incendio_cozinha' | 'incendio_geradores' | 'vazamento_gas_medicinal' | 'blecaute_geral';
+  sectorName: string;
+  floorId: number;
+  originRoomNumber: string;
+  originRoomName: string;
+  totalPatientsCount: number;
+  patientsP0: number; // Autônomo
+  patientsP1: number; // Mobilidade Reduzida
+  patientsP2: number; // Cadeirante
+  patientsP3: number; // Acamado
+  patientsP4: number; // Suporte de Vida
+  
+  // Falhas Injetadas / Condições de Contorno
+  sprinklerUnavailable: boolean;
+  stairABlocked: boolean;
+  stairBDoorHeldOpen: boolean;
+  pressurizationFailure: boolean;
+  elevatorFailure: boolean;
+  reducedBrigade50: boolean;
+  medicalGasValveStuck: boolean;
+  smokeExtractionFailure: boolean;
+  delayedAlarmDispatch: boolean;
+  oxygenZoneRisk: boolean;
+
+  difficultyLevel: 'basico' | 'intermediario' | 'avancado';
+  instructorNotes: string;
+}

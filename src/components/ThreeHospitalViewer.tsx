@@ -5,8 +5,26 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { Floor, Room, Patient, Team } from '../types';
-import { Eye, Layers, ZoomIn, ZoomOut, RotateCcw, AlertTriangle, ShieldCheck, Flame, Compass } from 'lucide-react';
+import { Floor, Room, Patient, Team, CFDVisualizationMode, CFDProbeSensor } from '../types';
+import { cfdSolver } from '../services/cfdEngine';
+import { 
+  Eye, 
+  Layers, 
+  ZoomIn, 
+  ZoomOut, 
+  RotateCcw, 
+  AlertTriangle, 
+  ShieldCheck, 
+  Flame, 
+  Compass, 
+  Gauge, 
+  Wind, 
+  Activity, 
+  Sliders,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp
+} from 'lucide-react';
 
 interface ThreeHospitalViewerProps {
   floors: Floor[];
@@ -21,6 +39,7 @@ interface ThreeHospitalViewerProps {
   smokeSpreadLevel: number; // 0 to 1
   isNorthStairBlocked: boolean;
   selectedRoomId?: string | null;
+  onOpenReferences?: () => void;
 }
 
 export const ThreeHospitalViewer: React.FC<ThreeHospitalViewerProps> = ({
@@ -35,7 +54,8 @@ export const ThreeHospitalViewer: React.FC<ThreeHospitalViewerProps> = ({
   fireSpreadLevel,
   smokeSpreadLevel,
   isNorthStairBlocked,
-  selectedRoomId
+  selectedRoomId,
+  onOpenReferences
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -50,6 +70,11 @@ export const ThreeHospitalViewer: React.FC<ThreeHospitalViewerProps> = ({
   const [showPatients, setShowPatients] = useState(true);
   const [showTeams, setShowTeams] = useState(true);
   const [hoveredInfo, setHoveredInfo] = useState<string | null>(null);
+
+  // CFD Fire Dynamics Simulator State
+  const [cfdMode, setCfdMode] = useState<'padrao_3d' | CFDVisualizationMode>('padrao_3d');
+  const [showCFDProbes, setShowCFDProbes] = useState(false);
+  const [cfdTelemetry, setCfdTelemetry] = useState(cfdSolver.getState());
 
   // Interaction state
   const isDraggingRef = useRef(false);
@@ -359,7 +384,71 @@ export const ThreeHospitalViewer: React.FC<ThreeHospitalViewerProps> = ({
       rootGroup.add(roomBorder);
     });
 
-    // Draw Patients as agents
+    // CFD Simulation Mesh Grid Overlay (when CFD Mode is active)
+    if (cfdMode !== 'padrao_3d') {
+      const cfdFloorY = (selectedFloorId ?? 4) * FLOOR_SPACING + 0.08;
+      const cfdGroup = new THREE.Group();
+
+      cfdSolver.grid.forEach((row) => {
+        row.forEach((cell) => {
+          if (cell.isWall) return;
+
+          let cellColor = new THREE.Color(0x1e293b);
+          let cellOpacity = 0.45;
+
+          if (cfdMode === 'temperatura') {
+            const t = cell.tempC;
+            if (t <= 25) cellColor = new THREE.Color(0x0284c7);
+            else if (t <= 50) cellColor = new THREE.Color(0x06b6d4);
+            else if (t <= 80) cellColor = new THREE.Color(0xeab308);
+            else if (t <= 160) cellColor = new THREE.Color(0xf97316);
+            else if (t <= 300) cellColor = new THREE.Color(0xef4444);
+            else cellColor = new THREE.Color(0xffffff); // Flashover white/hot
+            cellOpacity = Math.min(0.85, 0.35 + (t / 400));
+          } else if (cfdMode === 'fumaca_visibilidade') {
+            const v = cell.visibilityM;
+            if (v >= 20) cellColor = new THREE.Color(0x38bdf8);
+            else if (v >= 10) cellColor = new THREE.Color(0x64748b);
+            else if (v >= 3) cellColor = new THREE.Color(0x334155);
+            else cellColor = new THREE.Color(0x0f172a); // Blind dense smoke
+            cellOpacity = Math.max(0.2, 1.0 - (v / 30));
+          } else if (cfdMode === 'toxicidade_co') {
+            const co = cell.coPpm;
+            if (co <= 20) cellColor = new THREE.Color(0x10b981);
+            else if (co <= 60) cellColor = new THREE.Color(0xf59e0b);
+            else if (co <= 150) cellColor = new THREE.Color(0xf43f5e);
+            else cellColor = new THREE.Color(0x881337); // Lethal CO
+            cellOpacity = Math.min(0.85, 0.3 + (co / 300));
+          } else if (cfdMode === 'vetores_escoamento') {
+            cellColor = new THREE.Color(0x6366f1);
+            cellOpacity = 0.35;
+          } else if (cfdMode === 'pathfinder_rotas') {
+            // Pathfinder gradient streamlines
+            if (cell.isRefugeZone) cellColor = new THREE.Color(0x10b981);
+            else if (cell.y >= 8 && cell.y <= 11) {
+              cellColor = cell.x > 18 ? new THREE.Color(0x10b981) : new THREE.Color(0xf59e0b);
+            }
+            cellOpacity = 0.55;
+          }
+
+          const cellQuad = new THREE.Mesh(
+            new THREE.PlaneGeometry(cfdSolver.dx * 0.95, cfdSolver.dy * 0.95),
+            new THREE.MeshBasicMaterial({
+              color: cellColor,
+              transparent: true,
+              opacity: cellOpacity,
+              side: THREE.DoubleSide
+            })
+          );
+          cellQuad.rotation.x = -Math.PI / 2;
+          cellQuad.position.set(cell.worldX, cfdFloorY, cell.worldZ);
+          cfdGroup.add(cellQuad);
+        });
+      });
+      rootGroup.add(cfdGroup);
+    }
+
+    // Draw Patients as agents (Hospital Beds for P3/P4, Wheelchairs for P2, Avatars for P0/P1)
     if (showPatients) {
       patients.forEach((pat) => {
         const isCurrentFloor = selectedFloorId === null || selectedFloorId === pat.floorId;
@@ -369,37 +458,98 @@ export const ThreeHospitalViewer: React.FC<ThreeHospitalViewerProps> = ({
         const room = rooms.find((r) => r.roomNumber === pat.roomNumber || r.id === pat.roomNumber);
         const posX = room ? room.posX + (Math.sin(pat.age) * 1.2) : 0;
         const posZ = room ? room.posZ + (Math.cos(pat.age) * 1.2) : 0;
-        const posY = pat.floorId * FLOOR_SPACING + 0.6;
+        const posY = pat.floorId * FLOOR_SPACING + 0.35;
+
+        const patGroup = new THREE.Group();
+        patGroup.position.set(posX, posY, posZ);
+        patGroup.userData = { patient: pat };
 
         let agentColor = 0x06b6d4; // P0 cyan
         if (pat.category === 'P1') agentColor = 0xeab308; // P1 yellow
         if (pat.category === 'P2') agentColor = 0xf97316; // P2 orange
         if (pat.category === 'P3') agentColor = 0xd946ef; // P3 purple/magenta
         if (pat.category === 'P4') agentColor = 0xef4444; // P4 red critical
-
         if (pat.status === 'evacuado_seguro') agentColor = 0x10b981; // Safe green
 
-        // Patient Sphere
-        const patientGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.9, 12);
-        const patientMat = new THREE.MeshStandardMaterial({
-          color: agentColor,
-          roughness: 0.3,
-          metalness: 0.2
-        });
-        const patientMesh = new THREE.Mesh(patientGeo, patientMat);
-        patientMesh.position.set(posX, posY, posZ);
-        patientMesh.userData = { patient: pat };
-        rootGroup.add(patientMesh);
+        if (pat.category === 'P3' || pat.category === 'P4') {
+          // --- REALISTIC 3D HOSPITAL BED (Leito Articulado) ---
+          const mattressGeo = new THREE.BoxGeometry(1.0, 0.25, 2.0);
+          const mattressMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.5 });
+          const mattress = new THREE.Mesh(mattressGeo, mattressMat);
+          mattress.position.y = 0.45;
+          patGroup.add(mattress);
 
-        // Ring indicator for critical life support (P4)
-        if (pat.category === 'P4') {
-          const ringGeo = new THREE.RingGeometry(0.5, 0.7, 16);
-          const ringMat = new THREE.MeshBasicMaterial({ color: 0xff0044, side: THREE.DoubleSide });
-          const ringMesh = new THREE.Mesh(ringGeo, ringMat);
-          ringMesh.rotation.x = Math.PI / 2;
-          ringMesh.position.set(posX, posY - 0.4, posZ);
-          rootGroup.add(ringMesh);
+          const frameMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.7, roughness: 0.3 });
+          const headboard = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.6, 0.08), frameMat);
+          headboard.position.set(0, 0.6, 0.96);
+          patGroup.add(headboard);
+
+          const footboard = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.45, 0.08), frameMat);
+          footboard.position.set(0, 0.5, -0.96);
+          patGroup.add(footboard);
+
+          // 4 Caster Wheels
+          const wheelGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.06, 8);
+          const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
+          [[-0.45, 0.9], [0.45, 0.9], [-0.45, -0.9], [0.45, -0.9]].forEach(([wx, wz]) => {
+            const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+            wheel.rotation.z = Math.PI / 2;
+            wheel.position.set(wx, 0.08, wz);
+            patGroup.add(wheel);
+          });
+
+          // Blanket
+          const blanketGeo = new THREE.BoxGeometry(0.92, 0.1, 1.4);
+          const blanketMat = new THREE.MeshStandardMaterial({ color: agentColor, roughness: 0.4 });
+          const blanket = new THREE.Mesh(blanketGeo, blanketMat);
+          blanket.position.set(0, 0.58, -0.2);
+          patGroup.add(blanket);
+
+          // IV Drip Pole + Life support beacon for P4
+          if (pat.category === 'P4') {
+            const poleGeo = new THREE.CylinderGeometry(0.03, 0.03, 1.6, 6);
+            const pole = new THREE.Mesh(poleGeo, frameMat);
+            pole.position.set(0.55, 0.9, 0.6);
+            patGroup.add(pole);
+
+            const beaconGeo = new THREE.SphereGeometry(0.12, 8, 8);
+            const beaconMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+            const beacon = new THREE.Mesh(beaconGeo, beaconMat);
+            beacon.position.set(0.55, 1.7, 0.6);
+            patGroup.add(beacon);
+          }
+        } else if (pat.category === 'P2') {
+          // --- REALISTIC 3D WHEELCHAIR (Cadeira de Rodas) ---
+          const seatMat = new THREE.MeshStandardMaterial({ color: agentColor, roughness: 0.4 });
+          const seat = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.08, 0.65), seatMat);
+          seat.position.y = 0.45;
+          patGroup.add(seat);
+
+          const backrest = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.6, 0.06), seatMat);
+          backrest.position.set(0, 0.75, 0.3);
+          patGroup.add(backrest);
+
+          const largeWheelGeo = new THREE.TorusGeometry(0.32, 0.035, 8, 20);
+          const wheelMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.6 });
+          const leftWheel = new THREE.Mesh(largeWheelGeo, wheelMat);
+          leftWheel.rotation.y = Math.PI / 2;
+          leftWheel.position.set(-0.38, 0.35, 0.1);
+          patGroup.add(leftWheel);
+
+          const rightWheel = new THREE.Mesh(largeWheelGeo, wheelMat);
+          rightWheel.rotation.y = Math.PI / 2;
+          rightWheel.position.set(0.38, 0.35, 0.1);
+          patGroup.add(rightWheel);
+        } else {
+          // Ambulatory Avatar P0 / P1
+          const patientGeo = new THREE.CylinderGeometry(0.32, 0.32, 0.9, 12);
+          const patientMat = new THREE.MeshStandardMaterial({ color: agentColor, roughness: 0.3 });
+          const patientMesh = new THREE.Mesh(patientGeo, patientMat);
+          patientMesh.position.y = 0.45;
+          patGroup.add(patientMesh);
         }
+
+        rootGroup.add(patGroup);
       });
     }
 
@@ -652,82 +802,212 @@ export const ThreeHospitalViewer: React.FC<ThreeHospitalViewerProps> = ({
   return (
     <div className="relative w-full h-full min-h-[460px] bg-slate-950 rounded-xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col">
       {/* Top Floating Control Bar */}
-      <div className="absolute top-3 left-3 right-3 z-10 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
-        {/* Floor Selection Pills */}
-        <div className="flex items-center gap-1 bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-700 shadow-md pointer-events-auto">
-          <span className="text-xs font-semibold text-slate-400 mr-1 flex items-center gap-1">
-            <Layers className="w-3.5 h-3.5 text-cyan-400" /> Pavimento:
-          </span>
-          <button
-            onClick={() => onSelectFloor(null)}
-            className={`px-2.5 py-1 text-xs rounded font-medium transition ${
-              selectedFloorId === null
-                ? 'bg-cyan-600 text-white font-bold'
-                : 'text-slate-300 hover:bg-slate-800'
-            }`}
-          >
-            Todos (3D Geral)
-          </button>
-          {[4, 3, 2, 1, 0, -1].map((fId) => (
+      <div className="absolute top-3 left-3 right-3 z-10 flex flex-col gap-2 pointer-events-none">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {/* Floor Selection Pills */}
+          <div className="flex items-center gap-1 bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-700 shadow-md pointer-events-auto">
+            <span className="text-xs font-semibold text-slate-400 mr-1 flex items-center gap-1">
+              <Layers className="w-3.5 h-3.5 text-cyan-400" /> Pavimento:
+            </span>
             <button
-              key={fId}
-              onClick={() => onSelectFloor(fId)}
-              className={`px-2 py-1 text-xs rounded font-medium transition ${
-                selectedFloorId === fId
-                  ? 'bg-rose-600 text-white font-bold shadow'
-                  : fId === 4
-                  ? 'text-rose-300 hover:bg-slate-800'
+              onClick={() => onSelectFloor(null)}
+              className={`px-2.5 py-1 text-xs rounded font-medium transition ${
+                selectedFloorId === null
+                  ? 'bg-cyan-600 text-white font-bold'
                   : 'text-slate-300 hover:bg-slate-800'
               }`}
             >
-              {fId === -1 ? 'Subsolo' : fId === 0 ? 'Térreo' : `${fId}º`}
+              Todos (3D Geral)
             </button>
-          ))}
+            {[4, 3, 2, 1, 0, -1].map((fId) => (
+              <button
+                key={fId}
+                onClick={() => onSelectFloor(fId)}
+                className={`px-2 py-1 text-xs rounded font-medium transition ${
+                  selectedFloorId === fId
+                    ? 'bg-rose-600 text-white font-bold shadow'
+                    : fId === 4
+                    ? 'text-rose-300 hover:bg-slate-800'
+                    : 'text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                {fId === -1 ? 'Subsolo' : fId === 0 ? 'Térreo' : `${fId}º`}
+              </button>
+            ))}
+          </div>
+
+          {/* View Mode & Toggles */}
+          <div className="flex items-center gap-1.5 bg-slate-900/90 backdrop-blur-md px-2.5 py-1.5 rounded-lg border border-slate-700 shadow-md pointer-events-auto">
+            <button
+              onClick={toggle2DView}
+              className={`flex items-center gap-1 px-2.5 py-1 text-xs rounded font-medium transition ${
+                is2DMode ? 'bg-indigo-600 text-white font-bold' : 'text-slate-300 hover:bg-slate-800'
+              }`}
+              title="Alternar entre Planta 2D Superior e Perspectiva 3D Isométrica"
+            >
+              <Compass className="w-3.5 h-3.5" /> {is2DMode ? 'Planta 2D' : 'Modelo 3D'}
+            </button>
+
+            {onOpenReferences && (
+              <button
+                onClick={onOpenReferences}
+                className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-indigo-500/30 font-medium"
+                title="Modelos de Referência Pathfinder & FDS"
+              >
+                <Activity className="w-3.5 h-3.5" /> Benchmarks
+              </button>
+            )}
+
+            <button
+              onClick={() => setShowCFDProbes(!showCFDProbes)}
+              className={`flex items-center gap-1 px-2 py-1 text-xs rounded font-medium transition ${
+                showCFDProbes
+                  ? 'bg-amber-600 text-white font-bold'
+                  : 'bg-slate-800 text-amber-300 hover:bg-slate-700 border border-amber-500/30'
+              }`}
+              title="Exibir Leituras das Sondas CFD"
+            >
+              <Gauge className="w-3.5 h-3.5" /> Sondas CFD
+            </button>
+
+            <button
+              onClick={resetCamera}
+              className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded"
+              title="Resetar Câmera"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+
+            <button
+              onClick={() => {
+                cameraAngleRef.current.radius = Math.max(12, cameraAngleRef.current.radius - 5);
+                updateCameraPosition();
+              }}
+              className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded"
+              title="Aproximar Zoom"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+
+            <button
+              onClick={() => {
+                cameraAngleRef.current.radius = Math.min(90, cameraAngleRef.current.radius + 5);
+                updateCameraPosition();
+              }}
+              className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded"
+              title="Afastar Zoom"
+            >
+              <ZoomOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
-        {/* View Mode & Toggles */}
-        <div className="flex items-center gap-1.5 bg-slate-900/90 backdrop-blur-md px-2.5 py-1.5 rounded-lg border border-slate-700 shadow-md pointer-events-auto">
+        {/* CFD FDS Visualizer Mode Bar */}
+        <div className="flex flex-wrap items-center gap-1 bg-slate-950/90 backdrop-blur-md p-1.5 rounded-lg border border-indigo-500/40 shadow-lg pointer-events-auto self-start">
+          <span className="text-[11px] font-bold text-indigo-300 uppercase tracking-wider px-2 flex items-center gap-1">
+            <Flame className="w-3 h-3 text-rose-500" /> Modo CFD:
+          </span>
+
           <button
-            onClick={toggle2DView}
-            className={`flex items-center gap-1 px-2.5 py-1 text-xs rounded font-medium transition ${
-              is2DMode ? 'bg-indigo-600 text-white font-bold' : 'text-slate-300 hover:bg-slate-800'
+            onClick={() => setCfdMode('padrao_3d')}
+            className={`px-2 py-0.5 text-xs rounded transition ${
+              cfdMode === 'padrao_3d' ? 'bg-indigo-600 text-white font-bold' : 'text-slate-400 hover:text-white'
             }`}
-            title="Alternar entre Planta 2D Superior e Perspectiva 3D Isométrica"
           >
-            <Compass className="w-3.5 h-3.5" /> {is2DMode ? 'Planta 2D' : 'Modelo 3D'}
+            3D Físico
           </button>
-
           <button
-            onClick={resetCamera}
-            className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded"
-            title="Resetar Câmera"
+            onClick={() => setCfdMode('temperatura')}
+            className={`px-2 py-0.5 text-xs rounded transition ${
+              cfdMode === 'temperatura' ? 'bg-rose-600 text-white font-bold' : 'text-slate-400 hover:text-white'
+            }`}
           >
-            <RotateCcw className="w-3.5 h-3.5" />
+            Temperatura (°C)
           </button>
-
           <button
-            onClick={() => {
-              cameraAngleRef.current.radius = Math.max(12, cameraAngleRef.current.radius - 5);
-              updateCameraPosition();
-            }}
-            className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded"
-            title="Aproximar Zoom"
+            onClick={() => setCfdMode('fumaca_visibilidade')}
+            className={`px-2 py-0.5 text-xs rounded transition ${
+              cfdMode === 'fumaca_visibilidade' ? 'bg-slate-600 text-white font-bold' : 'text-slate-400 hover:text-white'
+            }`}
           >
-            <ZoomIn className="w-3.5 h-3.5" />
+            Visibilidade (m)
           </button>
-
           <button
-            onClick={() => {
-              cameraAngleRef.current.radius = Math.min(90, cameraAngleRef.current.radius + 5);
-              updateCameraPosition();
-            }}
-            className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded"
-            title="Afastar Zoom"
+            onClick={() => setCfdMode('toxicidade_co')}
+            className={`px-2 py-0.5 text-xs rounded transition ${
+              cfdMode === 'toxicidade_co' ? 'bg-purple-600 text-white font-bold' : 'text-slate-400 hover:text-white'
+            }`}
           >
-            <ZoomOut className="w-3.5 h-3.5" />
+            CO ppm & FED
+          </button>
+          <button
+            onClick={() => setCfdMode('pathfinder_rotas')}
+            className={`px-2 py-0.5 text-xs rounded transition ${
+              cfdMode === 'pathfinder_rotas' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            Pathfinder Streamlines
           </button>
         </div>
       </div>
+
+      {/* CFD Probes Telemetry HUD Overlay */}
+      {showCFDProbes && (
+        <div className="absolute top-28 right-3 z-20 w-80 bg-slate-950/95 backdrop-blur-md border border-amber-500/40 rounded-xl p-3 shadow-2xl space-y-2 pointer-events-auto">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+            <div className="flex items-center gap-1.5">
+              <Gauge className="w-4 h-4 text-amber-400" />
+              <span className="text-xs font-bold text-white uppercase tracking-wider">
+                Sondas CFD em Tempo Real
+              </span>
+            </div>
+            <button
+              onClick={() => setShowCFDProbes(false)}
+              className="text-slate-400 hover:text-white text-xs"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+            {cfdTelemetry.probes.map((probe) => (
+              <div
+                key={probe.id}
+                className="p-2 bg-slate-900/90 rounded border border-slate-800 text-[11px]"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-200">{probe.name}</span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded font-bold text-[9px] uppercase ${
+                      probe.tenabilityStatus === 'tenivel'
+                        ? 'bg-emerald-500/20 text-emerald-400'
+                        : probe.tenabilityStatus === 'alerta_moderado'
+                        ? 'bg-amber-500/20 text-amber-400'
+                        : 'bg-rose-500/20 text-rose-400 animate-pulse'
+                    }`}
+                  >
+                    {probe.tenabilityStatus === 'tenivel'
+                      ? 'Tenível'
+                      : probe.tenabilityStatus === 'alerta_moderado'
+                      ? 'Alerta'
+                      : 'Inabitável'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-1 mt-1 text-slate-400 font-mono">
+                  <div>Temp: <span className="text-white font-bold">{probe.tempC}°C</span></div>
+                  <div>Vis: <span className="text-cyan-300 font-bold">{probe.visibilityM}m</span></div>
+                  <div>CO: <span className="text-amber-300 font-bold">{probe.coPpm}ppm</span></div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="text-[10px] text-slate-500 pt-1 border-t border-slate-800/80 flex justify-between">
+            <span>HRR: {cfdTelemetry.currentHRRKw} kW</span>
+            <span>Pico: {cfdTelemetry.peakTempC}°C</span>
+          </div>
+        </div>
+      )}
 
       {/* Layer Visibility Toggles (Bottom Left) */}
       <div className="absolute bottom-3 left-3 z-10 flex flex-wrap items-center gap-1.5 bg-slate-900/90 backdrop-blur-md p-1.5 rounded-lg border border-slate-800 shadow-md">

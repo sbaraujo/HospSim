@@ -20,11 +20,17 @@ import {
   FileText,
   Settings,
   ShieldAlert,
-  Boxes
+  Boxes,
+  Wand2,
+  ShieldCheck,
+  Compass
 } from 'lucide-react';
 
 export type ActiveSidebarTab =
   | 'dashboard'
+  | 'simulacao'
+  | 'motor_cenarios'
+  | 'protecao_incendio'
   | 'hospital'
   | 'edificacao'
   | 'pavimentos'
@@ -34,10 +40,10 @@ export type ActiveSidebarTab =
   | 'recursos'
   | 'cenarios'
   | 'eventos'
-  | 'simulacao'
   | 'comando_c3'
   | 'avaliacao'
   | 'relatorios'
+  | 'referencias_benchmarks'
   | 'configuracoes';
 
 interface NavigationSidebarProps {
@@ -57,18 +63,21 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
 }) => {
   const navItems: { id: ActiveSidebarTab; label: string; icon: React.ReactNode; badge?: string | number; badgeColor?: string }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
-    { id: 'simulacao', label: 'Simulação 3D', icon: <Flame className="w-4 h-4 text-rose-500 animate-pulse" />, badge: 'Ao Vivo', badgeColor: 'bg-rose-900 text-rose-300' },
+    { id: 'simulacao', label: 'Simulação 3D & CFD', icon: <Flame className="w-4 h-4 text-rose-500 animate-pulse" />, badge: 'Ao Vivo', badgeColor: 'bg-rose-900 text-rose-300' },
+    { id: 'motor_cenarios', label: 'Motor de Cenários', icon: <Wand2 className="w-4 h-4 text-indigo-400" />, badge: 'Novo', badgeColor: 'bg-indigo-900 text-indigo-300' },
+    { id: 'protecao_incendio', label: '15 Sistemas Proteção', icon: <ShieldCheck className="w-4 h-4 text-rose-400" />, badge: '15/15', badgeColor: 'bg-rose-950 text-rose-300' },
     { id: 'comando_c3', label: 'Comando C3', icon: <Radio className="w-4 h-4 text-cyan-400" /> },
     { id: 'hospital', label: 'Hospital', icon: <Building className="w-4 h-4" /> },
     { id: 'edificacao', label: 'Edificação', icon: <Boxes className="w-4 h-4" /> },
-    { id: 'pavimentos', label: 'Pavimentos', icon: <Layers className="w-4 h-4" />, badge: '5+1' },
+    { id: 'pavimentos', label: 'Pavimentos', icon: <Layers className="w-4 h-4" />, badge: '6 Níveis' },
     { id: 'ambientes', label: 'Ambientes', icon: <DoorOpen className="w-4 h-4" /> },
-    { id: 'pacientes', label: 'Pacientes', icon: <Users className="w-4 h-4" />, badge: patientsCount, badgeColor: 'bg-cyan-950 text-cyan-300' },
-    { id: 'equipes', label: 'Equipes', icon: <Shield className="w-4 h-4" />, badge: teamsCount },
+    { id: 'pacientes', label: 'Pacientes P0-P4', icon: <Users className="w-4 h-4" />, badge: patientsCount, badgeColor: 'bg-cyan-950 text-cyan-300' },
+    { id: 'equipes', label: 'Equipes & Brigada', icon: <Shield className="w-4 h-4" />, badge: teamsCount },
     { id: 'recursos', label: 'Recursos', icon: <Activity className="w-4 h-4" /> },
-    { id: 'cenarios', label: 'Cenários', icon: <Sparkles className="w-4 h-4 text-amber-400" />, badge: '20+' },
-    { id: 'eventos', label: 'Eventos', icon: <ListOrdered className="w-4 h-4" />, badge: criticalEventsCount, badgeColor: 'bg-amber-950 text-amber-300' },
-    { id: 'avaliacao', label: 'Avaliação', icon: <Award className="w-4 h-4 text-emerald-400" /> },
+    { id: 'cenarios', label: 'Catálogo Cenários', icon: <Sparkles className="w-4 h-4 text-amber-400" />, badge: '20+' },
+    { id: 'eventos', label: 'Eventos Timeline', icon: <ListOrdered className="w-4 h-4" />, badge: criticalEventsCount, badgeColor: 'bg-amber-950 text-amber-300' },
+    { id: 'referencias_benchmarks', label: 'Pathfinder & FDS', icon: <Compass className="w-4 h-4 text-emerald-400" />, badge: 'Ref' },
+    { id: 'avaliacao', label: 'Avaliação & Radar', icon: <Award className="w-4 h-4 text-emerald-400" /> },
     { id: 'relatorios', label: 'Relatórios PDF', icon: <FileText className="w-4 h-4" /> },
     { id: 'configuracoes', label: 'Configurações', icon: <Settings className="w-4 h-4" /> },
   ];

@@ -17,7 +17,9 @@ import {
   Flame,
   AlertTriangle,
   Building2,
-  GraduationCap
+  GraduationCap,
+  BookOpen,
+  FileCheck
 } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
 
@@ -37,6 +39,8 @@ interface TopBarProps {
   onEndSimulation: () => void;
   onTriggerSync: () => void;
   onChangeMode: (mode: SimulationMode) => void;
+  onGenerateManualPDF?: () => void;
+  onGenerateReportPDF?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -54,7 +58,9 @@ export const TopBar: React.FC<TopBarProps> = ({
   onChangeSpeed,
   onEndSimulation,
   onTriggerSync,
-  onChangeMode
+  onChangeMode,
+  onGenerateManualPDF,
+  onGenerateReportPDF
 }) => {
   const formatElapsed = (sec: number) => {
     const mins = Math.floor(sec / 60);
@@ -191,6 +197,31 @@ export const TopBar: React.FC<TopBarProps> = ({
         >
           <Square className="w-3.5 h-3.5" /> Encerrar
         </button>
+
+        {/* The Two Official System & Exercise PDF Buttons */}
+        <div className="flex items-center gap-1.5 pl-2 border-l border-slate-800">
+          {onGenerateManualPDF && (
+            <button
+              onClick={onGenerateManualPDF}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/80 text-indigo-200 transition shadow hover:shadow-indigo-500/20"
+              title="Gerar e Baixar o Manual Completo do Sistema HEDS em PDF"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="hidden md:inline">Manual do Sistema</span>
+            </button>
+          )}
+
+          {onGenerateReportPDF && (
+            <button
+              onClick={onGenerateReportPDF}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700/80 text-emerald-200 transition shadow hover:shadow-emerald-500/20"
+              title="Gerar e Baixar o Relatório Técnico Oficial do Exercício em PDF"
+            >
+              <FileCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden md:inline">Relatório do Exercício</span>
+            </button>
+          )}
+        </div>
 
         {/* Offline/Online Sync Badge & Trigger */}
         <div className="flex items-center gap-1 pl-2 border-l border-slate-800">

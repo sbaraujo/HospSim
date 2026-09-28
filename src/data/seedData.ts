@@ -14,7 +14,8 @@ import {
   ResourceItem,
   Equipment,
   Scenario,
-  HazardType
+  HazardType,
+  FireProtectionSystemItem
 } from '../types';
 
 export const PATIENT_TYPES: Record<string, PatientType> = {
@@ -65,6 +66,204 @@ export const PATIENT_TYPES: Record<string, PatientType> = {
   }
 };
 
+export const INITIAL_FIRE_PROTECTION_CHECKLIST: FireProtectionSystemItem[] = [
+  {
+    id: 'fps-01',
+    orderNumber: 1,
+    name: 'Sistema de detecção e alarme de incêndio',
+    code: 'SDAI-01',
+    exists: true,
+    operationalStatus: 'operacional',
+    standardRef: 'ABNT NBR 17240 / NFPA 72',
+    coveragePercent: 100,
+    locationScope: '100% dos pavimentos, quartos, UTIs, enfermarias e dutos de ar',
+    cfdImpactDescription: 'Gera alarme precoce (t < 60s), aciona sirenes e comando de evacuação.',
+    lastInspectionDate: '2026-08-15'
+  },
+  {
+    id: 'fps-02',
+    orderNumber: 2,
+    name: 'Sistema de chuveiros automáticos (sprinklers)',
+    code: 'SPK-02',
+    exists: true,
+    operationalStatus: 'parcial', // Quarto 408 em manutenção / indisponível
+    standardRef: 'ABNT NBR 10897 / NFPA 13',
+    coveragePercent: 88,
+    locationScope: 'Pavimentos 1 a 4, corredores e enfermarias (exceto RM 408)',
+    cfdImpactDescription: 'Atenua HRR do incêndio de 2.5 MW para < 250 kW nos setores ativos.',
+    lastInspectionDate: '2026-07-20'
+  },
+  {
+    id: 'fps-03',
+    orderNumber: 3,
+    name: 'Sistema de hidrantes e mangotinhos',
+    code: 'SHM-03',
+    exists: true,
+    operationalStatus: 'operacional',
+    standardRef: 'ABNT NBR 13714',
+    coveragePercent: 100,
+    locationScope: 'Caixas duplas em cada patamar de escada e corredores a cada 30m',
+    cfdImpactDescription: 'Permite ataque manual pela brigada e Corpo de Bombeiros com vazão de 300 L/min.',
+    lastInspectionDate: '2026-09-01'
+  },
+  {
+    id: 'fps-04',
+    orderNumber: 4,
+    name: 'Extintores portáteis',
+    code: 'EXT-04',
+    exists: true,
+    operationalStatus: 'operacional',
+    standardRef: 'ABNT NBR 12693 / NFPA 10',
+    coveragePercent: 100,
+    locationScope: 'Unidades de Água, PQS (ABC) e CO2 em todos os corredores a cada 15m',
+    cfdImpactDescription: 'Combate a princípios de incêndio em fase inicial (primeiros 180s).',
+    lastInspectionDate: '2026-09-10'
+  },
+  {
+    id: 'fps-05',
+    orderNumber: 5,
+    name: 'Sistema de controle de fumaça (extração natural e/ou mecânica)',
+    code: 'SCF-05',
+    exists: true,
+    operationalStatus: 'operacional',
+    standardRef: 'ABNT NBR 14880 / NFPA 92',
+    coveragePercent: 90,
+    locationScope: 'Atrito e dutos mecânicos de extração no teto dos corredores centrais',
+    cfdImpactDescription: 'Mantém camada de fumaça acima de 2.10m do piso, reduzindo toxicidade no CFD.',
+    lastInspectionDate: '2026-08-30'
+  },
+  {
+    id: 'fps-06',
+    orderNumber: 6,
+    name: 'Sistema de pressurização de escadas e rotas de fuga',
+    code: 'SPE-06',
+    exists: true,
+    operationalStatus: 'operacional',
+    standardRef: 'ABNT NBR 14880 / IT-13 CBMSP',
+    coveragePercent: 100,
+    locationScope: 'Escada de Emergência Norte e Escada Sul (ventiladores com +50 Pa)',
+    cfdImpactDescription: 'Garante diferencial de pressão positiva impedindo infiltração de fumaça na fuga.',
+    lastInspectionDate: '2026-08-10'
+  },
+  {
+    id: 'fps-07',
+    orderNumber: 7,
+    name: 'Compartimentação horizontal e vertical (barreiras e portas corta-fogo)',
+    code: 'CHV-07',
+    exists: true,
+    operationalStatus: 'operacional',
+    standardRef: 'ABNT NBR 11742 / NBR 9077 / NFPA 101',
+    coveragePercent: 100,
+    locationScope: 'Portas P-90 com fechamento eletromagnético e paredes TRRF 120 min',
+    cfdImpactDescription: 'Cria Áreas de Refúgio estanques permitindo evacuação horizontal por fases.',
+    lastInspectionDate: '2026-09-05'
+  },
+  {
+    id: 'fps-08',
+    orderNumber: 8,
+    name: 'Selagem corta-fogo de penetrações',
+    code: 'SCF-08',
+    exists: true,
+    operationalStatus: 'operacional',
+    standardRef: 'ABNT NBR 6479 / UL 1479',
+    coveragePercent: 95,
+    locationScope: 'Shafts elétricos, hidráulicos, gases medicinais e passagens de cabos',
+    cfdImpactDescription: 'Evita a propagação vertical de gases quentes entre pavimentos.',
+    lastInspectionDate: '2026-07-12'
+  },
+  {
+    id: 'fps-09',
+    orderNumber: 9,
+    name: 'Iluminação de emergência',
+    code: 'ILE-09',
+    exists: true,
+    operationalStatus: 'operacional',
+    standardRef: 'ABNT NBR 10898',
+    coveragePercent: 100,
+    locationScope: 'Blocos autônomos e rede central em corredores, escadas e leitos',
+    cfdImpactDescription: 'Garante mínimo de 5 lux no piso para orientação mesmo com corte de energia.',
+    lastInspectionDate: '2026-09-18'
+  },
+  {
+    id: 'fps-10',
+    orderNumber: 10,
+    name: 'Sinalização de emergência (fotoluminescente)',
+    code: 'SNE-10',
+    exists: true,
+    operationalStatus: 'operacional',
+    standardRef: 'ABNT NBR 13434',
+    coveragePercent: 100,
+    locationScope: 'Placas de saída, rotas, extintores e hidrantes com luminância 210 mcd/m2',
+    cfdImpactDescription: 'Permite reconhecimento das saídas mesmo com queda total de iluminação.',
+    lastInspectionDate: '2026-08-25'
+  },
+  {
+    id: 'fps-11',
+    orderNumber: 11,
+    name: 'Rotas de fuga e saídas de emergência',
+    code: 'RFE-11',
+    exists: true,
+    operationalStatus: 'operacional',
+    standardRef: 'ABNT NBR 9077 / NFPA 101 Life Safety',
+    coveragePercent: 100,
+    locationScope: 'Corredores largos (2.40m para passagem de macas), rampas e escadas enclausuradas',
+    cfdImpactDescription: 'Dimensionadas para vazão contínua de leitos, cadeirantes e pedestres.',
+    lastInspectionDate: '2026-09-02'
+  },
+  {
+    id: 'fps-12',
+    orderNumber: 12,
+    name: 'Sistema de alarme por voz / comunicação de emergência',
+    code: 'SAV-12',
+    exists: true,
+    operationalStatus: 'operacional',
+    standardRef: 'ABNT NBR ISO 7240-19 / NFPA 72 ECS',
+    coveragePercent: 100,
+    locationScope: 'Sonorização setorizada com mensagens pré-gravadas de código de emergência hospitalar',
+    cfdImpactDescription: 'Orienta equipes sem deflagrar pânico generalizado entre pacientes conscientes.',
+    lastInspectionDate: '2026-08-20'
+  },
+  {
+    id: 'fps-13',
+    orderNumber: 13,
+    name: 'Elevador de emergência',
+    code: 'ELE-13',
+    exists: true,
+    operationalStatus: 'operacional',
+    standardRef: 'ABNT NBR NM 207 / NBR 9077 / NFPA 99',
+    coveragePercent: 100,
+    locationScope: 'Elevador de macas EL-03 com antecâmara pressurizada e alimentação por gerador',
+    cfdImpactDescription: 'Permite evacuação vertical prioritária de pacientes críticos P4 e acamados P3.',
+    lastInspectionDate: '2026-09-12'
+  },
+  {
+    id: 'fps-14',
+    orderNumber: 14,
+    name: 'Sistemas especiais de extinção por agentes limpos (áreas críticas)',
+    code: 'SEA-14',
+    exists: true,
+    operationalStatus: 'operacional',
+    standardRef: 'NFPA 2001 / NBR 15808 (Gás FM-200 / Novec 1230)',
+    coveragePercent: 100,
+    locationScope: 'Data Center, Sala de Ressonância Magnética, Farmácia de Alto Custo e CME',
+    cfdImpactDescription: 'Extinção sem resíduos químicos em ambientes com aparelhos eletromédicos sensíveis.',
+    lastInspectionDate: '2026-08-05'
+  },
+  {
+    id: 'fps-15',
+    orderNumber: 15,
+    name: 'Sistema de supressão de incêndio em cozinhas',
+    code: 'SSK-15',
+    exists: true,
+    operationalStatus: 'operacional',
+    standardRef: 'NFPA 96 / NFPA 17A (Agente saponificante Classe K)',
+    coveragePercent: 100,
+    locationScope: 'Coifas, fritadeiras e dutos de exaustão da Cozinha Central e Nutrição',
+    cfdImpactDescription: 'Corte automático de gás e supressão de fogo em óleo vegetal em menos de 10 segundos.',
+    lastInspectionDate: '2026-08-14'
+  }
+];
+
 export const INITIAL_HOSPITAL: Hospital = {
   id: 'hosp-001',
   code: 'HMSH-01',
@@ -73,21 +272,26 @@ export const INITIAL_HOSPITAL: Hospital = {
   address: 'Av. das Nações da Saúde, 2500 - Complexo Médico',
   city: 'Metrópole Central',
   state: 'SP',
-  floorsCount: 5,
+  floorsCount: 6,
+  buildingHeightM: 22.5,
+  floorHeightM: 3.5,
   totalAreaM2: 18500.00,
+  totalBedsCount: 180,
   maxOccupancy: 650,
   hasHeliport: true,
   phoneEmergency: '(11) 3999-1930 / Ramal 193',
-  notes: 'Hospital terciário de alta complexidade com UTI, Centro Cirúrgico, Pronto-Socorro e Enfermarias de Internação.'
+  notes: 'Hospital terciário de alta complexidade com UTI, Centro Cirúrgico, Pronto-Socorro e Enfermarias de Internação.',
+  constructionClassification: 'Edificação Hospitalar Tipo Z-2 / NBR 9077 (Alvenaria armada estrutural)',
+  fireProtectionChecklist: INITIAL_FIRE_PROTECTION_CHECKLIST
 };
 
 export const INITIAL_FLOORS: Floor[] = [
-  { id: 4, name: '4º Pavimento', purpose: 'Internação Clínica, Cirúrgica e Enfermarias (Quartos 401 a 415)', areaM2: 2400, isAffected: true, roomsCount: 15 },
-  { id: 3, name: '3º Pavimento', purpose: 'UTI Geral Adulto & UTI Coronariana (20 Leitos de Alta Gravidade)', areaM2: 2400, isAffected: false, roomsCount: 12 },
-  { id: 2, name: '2º Pavimento', purpose: 'Centro Cirúrgico (6 Salas), SRPA e Central de Material (CME)', areaM2: 2400, isAffected: false, roomsCount: 10 },
-  { id: 1, name: '1º Pavimento', purpose: 'Diagnóstico por Imagem, Tomografia, Laboratório e Farmácia Central', areaM2: 2400, isAffected: false, roomsCount: 8 },
-  { id: 0, name: 'Pavimento Térreo', purpose: 'Pronto-Socorro, Recepção Geral, Triagem Manchester e Saídas de Emergência', areaM2: 2800, isAffected: false, roomsCount: 14 },
-  { id: -1, name: 'Subsolo Técnico', purpose: 'Central de Gases Medicinais, Casa de Bombas, Geradores e Lavanderia', areaM2: 2100, isAffected: false, roomsCount: 6 }
+  { id: 4, name: '4º Pavimento', purpose: 'Internação Clínica, Cirúrgica e Enfermarias (Quartos 401 a 415)', areaM2: 2400, floorHeightM: 3.5, ceilingHeightM: 2.8, trrfRatingMin: 120, hasCompartmentation: true, fireDoorsCount: 4, isAffected: true, roomsCount: 15 },
+  { id: 3, name: '3º Pavimento', purpose: 'UTI Geral Adulto & UTI Coronariana (20 Leitos de Alta Gravidade)', areaM2: 2400, floorHeightM: 3.5, ceilingHeightM: 2.8, trrfRatingMin: 120, hasCompartmentation: true, fireDoorsCount: 4, isAffected: false, roomsCount: 12 },
+  { id: 2, name: '2º Pavimento', purpose: 'Centro Cirúrgico (6 Salas), SRPA e Central de Material (CME)', areaM2: 2400, floorHeightM: 3.5, ceilingHeightM: 3.0, trrfRatingMin: 120, hasCompartmentation: true, fireDoorsCount: 6, isAffected: false, roomsCount: 10 },
+  { id: 1, name: '1º Pavimento', purpose: 'Diagnóstico por Imagem, Tomografia, Laboratório e Farmácia Central', areaM2: 2400, floorHeightM: 3.5, ceilingHeightM: 2.8, trrfRatingMin: 90, hasCompartmentation: true, fireDoorsCount: 3, isAffected: false, roomsCount: 8 },
+  { id: 0, name: 'Pavimento Térreo', purpose: 'Pronto-Socorro, Recepção Geral, Triagem Manchester e Saídas de Emergência', areaM2: 2800, floorHeightM: 4.0, ceilingHeightM: 3.2, trrfRatingMin: 120, hasCompartmentation: true, fireDoorsCount: 5, isAffected: false, roomsCount: 14 },
+  { id: -1, name: 'Subsolo Técnico', purpose: 'Central de Gases Medicinais, Casa de Bombas, Geradores e Lavanderia', areaM2: 2100, floorHeightM: 4.5, ceilingHeightM: 3.6, trrfRatingMin: 180, hasCompartmentation: true, fireDoorsCount: 4, isAffected: false, roomsCount: 6 }
 ];
 
 export const INITIAL_ROOMS: Room[] = [
