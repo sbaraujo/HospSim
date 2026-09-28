@@ -16,6 +16,7 @@ import {
   CFDSimulationState,
   FDSDataset,
   FDSDeviceChannel,
+  FDSThermocoupleProbe,
   FDSFileParseResult,
   FDSSliceGridFrame
 } from '../types';
@@ -24,6 +25,7 @@ import {
   NIST_FDS_DATASET_SPRINKLER,
   NIST_FDS_DATASET_OXYGEN,
   AVAILABLE_FDS_DATASETS,
+  STANDARD_THERMOCOUPLE_PROBES,
   interpolateSeries
 } from './fdsDatasets';
 
@@ -418,6 +420,56 @@ export class CFDEngine {
       return true;
     }
     return false;
+  }
+
+  /**
+   * Returns active thermocouple rake probes, falling back to standard rake if needed
+   */
+  public getActiveThermocoupleProbes(): FDSThermocoupleProbe[] {
+    let ds = this.activeDataset;
+    if (this.sprinklersSuppression && ds.id === NIST_FDS_DATASET_STANDARD.id) {
+      ds = NIST_FDS_DATASET_SPRINKLER;
+    }
+    if (ds.thermocoupleProbes && ds.thermocoupleProbes.length > 0) {
+      return ds.thermocoupleProbes;
+    }
+    return STANDARD_THERMOCOUPLE_PROBES;
+  }
+
+  /**
+   * Calculates vertical thermal stratification profile at a specific simulated second
+   */
+  public getStratificationProfile(locationGroup: 'origin_room_408' | 'corridor_center', timeSec: number) {
+    const probes = this.getActiveThermocoupleProbes().filter(p => p.locationGroup === locationGroup);
+    const sorted = [...probes].sort((a, b) => b.heightM - a.heightM); // from ceiling to floor
+
+    const points = sorted.map(p => ({
+      probeId: p.id,
+      label: p.label,
+      heightM: p.heightM,
+      color: p.color,
+      tempC: Math.round(interpolateSeries(p.timeSeries, timeSec) * 10) / 10
+    }));
+
+    const ceilingTemp = points[0]?.tempC ?? 22;
+    const floorTemp = points[points.length - 1]?.tempC ?? 22;
+    const deltaT = Math.round((ceilingTemp - floorTemp) * 10) / 10;
+    const gradient = Math.round((deltaT / (2.7 - 0.5)) * 10) / 10; // °C/m
+
+    // Height of the hot smoke layer interface
+    const smokeLayerZ = locationGroup === 'origin_room_408'
+      ? Math.max(0.6, 2.8 - (timeSec > 60 ? 1.8 : timeSec * 0.03))
+      : this.smokeLayerHeightM;
+
+    return {
+      points,
+      ceilingTemp,
+      floorTemp,
+      deltaT,
+      gradient,
+      smokeLayerZ,
+      timeSec
+    };
   }
 
   // =========================================================================

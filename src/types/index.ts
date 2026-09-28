@@ -344,6 +344,16 @@ export interface CFDProbeSensor {
 // FDS (FIRE DYNAMICS SIMULATOR) INTEGRATION TYPES
 // ==========================================
 
+export interface FDSThermocoupleProbe {
+  id: string;
+  label: string;
+  heightM: number; // Elevation z in meters (ex: 0.5, 1.2, 1.8, 2.4, 2.7m)
+  locationGroup: 'origin_room_408' | 'corridor_center' | 'refuge_area' | 'stairwell_north' | 'stairwell_south';
+  locationGroupName: string;
+  color: string;
+  timeSeries: [number, number][]; // [timeSeconds, temperatureCelsius]
+}
+
 export interface FDSDeviceChannel {
   id: string; // Device ID (e.g., 'HRR', 'TEMP_408', 'VIS_CORR')
   name: string; // Human label
@@ -379,6 +389,7 @@ export interface FDSDataset {
   channels: FDSDeviceChannel[];
   sliceFrames: FDSSliceGridFrame[];
   description: string;
+  thermocoupleProbes?: FDSThermocoupleProbe[];
 }
 
 export interface FDSFileParseResult {
