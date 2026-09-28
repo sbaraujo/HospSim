@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="50%" stop-color="#1e1b4b"/>
+      <stop offset="100%" stop-color="#020617"/>
+    </linearGradient>
+    <linearGradient id="shield-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+    <linearGradient id="flame-grad" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#ef4444"/>
+      <stop offset="50%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#facc15"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="512" height="512" rx="100" fill="url(#bg-grad)"/>
+  
+  <!-- Outer Tech Radar Circle -->
+  <circle cx="256" cy="256" r="220" fill="none" stroke="#38bdf8" stroke-width="3" stroke-dasharray="16 10" opacity="0.4"/>
+  <circle cx="256" cy="256" r="180" fill="none" stroke="#e0e7ff" stroke-width="2" opacity="0.2"/>
+
+  <!-- Shield Base -->
+  <path d="M 256,70 L 390,130 C 390,290 256,410 256,430 C 256,410 122,290 122,130 Z" 
+        fill="url(#shield-grad)" 
+        stroke="#60a5fa" 
+        stroke-width="8" 
+        filter="drop-shadow(0 15px 30px rgba(0,0,0,0.6))" />
+
+  <!-- Inner Dark Plate -->
+  <path d="M 256,90 L 370,142 C 370,278 256,380 256,400 C 256,380 142,278 142,142 Z" 
+        fill="#090d16" 
+        stroke="#1e3a8a" 
+        stroke-width="3" />
+
+  <!-- Red Medical Emergency Cross -->
+  <path d="M 230,140 H 282 V 195 H 337 V 247 H 282 V 302 H 230 V 247 H 175 V 195 H 230 Z" 
+        fill="#ef4444" 
+        stroke="#ffffff" 
+        stroke-width="4" 
+        filter="drop-shadow(0 4px 10px rgba(239,68,68,0.5))" />
+
+  <!-- Core Flame Dynamic Center (Emergency) -->
+  <path d="M 256,170 C 270,210 295,225 285,255 C 275,275 250,290 256,320 C 240,290 230,270 236,250 C 240,230 250,210 256,170 Z" 
+        fill="url(#flame-grad)" 
+        filter="drop-shadow(0 0 12px rgba(249,115,22,0.8))" />
+
+  <!-- HEDS Acronym Banner -->
+  <rect x="166" y="340" width="180" height="38" rx="8" fill="#1e293b" stroke="#38bdf8" stroke-width="2"/>
+  <text x="256" y="366" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="22" fill="#38bdf8" text-anchor="middle" letter-spacing="4">HEDS</text>
+</svg>

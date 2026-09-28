@@ -1,0 +1,27 @@
+{
+  "id": "/",
+  "name": "Simulador IA de Tomada de Decisão em Emergências Hospitalares (HEDS)",
+  "short_name": "HEDS Sim",
+  "description": "Hospital Emergency Decision Simulator — Treinamento, simulação dinâmica 3D, C3 e avaliação em emergências hospitalares.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "theme_color": "#0f172a",
+  "background_color": "#020617",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["medical", "education", "productivity", "utilities"]
+}

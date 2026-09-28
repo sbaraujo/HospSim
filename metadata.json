@@ -1,0 +1,6 @@
+{
+  "name": "Simulador IA de Tomada de Decisão em Emergências Hospitalares (HEDS)",
+  "description": "Hospital Emergency Decision Simulator (HEDS) — Plataforma profissional de treinamento, simulação dinâmica de incidentes, modelo 3D, C3 e avaliação em emergências hospitalares.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
