@@ -23,13 +23,15 @@ import {
   Boxes,
   Wand2,
   ShieldCheck,
-  Compass
+  Compass,
+  Database
 } from 'lucide-react';
 
 export type ActiveSidebarTab =
   | 'dashboard'
   | 'simulacao'
   | 'motor_cenarios'
+  | 'fds_integration'
   | 'protecao_incendio'
   | 'hospital'
   | 'edificacao'
@@ -64,6 +66,7 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
   const navItems: { id: ActiveSidebarTab; label: string; icon: React.ReactNode; badge?: string | number; badgeColor?: string }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
     { id: 'simulacao', label: 'Simulação 3D & CFD', icon: <Flame className="w-4 h-4 text-rose-500 animate-pulse" />, badge: 'Ao Vivo', badgeColor: 'bg-rose-900 text-rose-300' },
+    { id: 'fds_integration', label: 'Integração FDS v6.8', icon: <Database className="w-4 h-4 text-amber-400" />, badge: 'FDS Real', badgeColor: 'bg-amber-950 text-amber-300' },
     { id: 'motor_cenarios', label: 'Motor de Cenários', icon: <Wand2 className="w-4 h-4 text-indigo-400" />, badge: 'Novo', badgeColor: 'bg-indigo-900 text-indigo-300' },
     { id: 'protecao_incendio', label: '15 Sistemas Proteção', icon: <ShieldCheck className="w-4 h-4 text-rose-400" />, badge: '15/15', badgeColor: 'bg-rose-950 text-rose-300' },
     { id: 'comando_c3', label: 'Comando C3', icon: <Radio className="w-4 h-4 text-cyan-400" /> },

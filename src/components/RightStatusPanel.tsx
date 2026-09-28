@@ -8,7 +8,8 @@ import {
   ScenarioEvent,
   Patient,
   ResourceItem,
-  SimulationLogEntry
+  SimulationLogEntry,
+  CFDSimulationState
 } from '../types';
 import {
   AlertTriangle,
@@ -20,7 +21,10 @@ import {
   Radio,
   ChevronRight,
   Sparkles,
-  HeartPulse
+  HeartPulse,
+  Database,
+  Gauge,
+  Wind
 } from 'lucide-react';
 
 interface RightStatusPanelProps {
@@ -32,7 +36,9 @@ interface RightStatusPanelProps {
   isNorthStairBlocked: boolean;
   fireSpreadLevel: number;
   smokeSpreadLevel: number;
+  cfdState?: CFDSimulationState;
   onSelectPatient: (patient: Patient) => void;
+  onOpenFDSModal?: () => void;
 }
 
 export const RightStatusPanel: React.FC<RightStatusPanelProps> = ({
@@ -44,12 +50,22 @@ export const RightStatusPanel: React.FC<RightStatusPanelProps> = ({
   isNorthStairBlocked,
   fireSpreadLevel,
   smokeSpreadLevel,
-  onSelectPatient
+  cfdState,
+  onSelectPatient,
+  onOpenFDSModal
 }) => {
   // Patients in acute risk (in fire room or heavy smoke zone)
   const atRiskPatients = patients.filter(
     (p) => p.status === 'exposto_risco' || p.status === 'critico' || (p.floorId === 4 && p.status === 'em_leito')
   );
+
+  const displayPeakTemp = cfdState ? cfdState.peakTempC : 285;
+  const displayVisibility = cfdState ? cfdState.averageCorridorVisibilityM : 8.5;
+  const displayHRR = cfdState ? cfdState.currentHRRKw : Math.round(fireSpreadLevel * 2800);
+  const displaySmokePct = cfdState ? Math.round(cfdState.smokeSpreadNormalized * 100) : Math.round(smokeSpreadLevel * 100);
+  const displayLayerHeight = cfdState ? cfdState.smokeLayerHeightM : 1.6;
+  const displayCO = cfdState ? cfdState.coMaxPpm : 45;
+  const displayFED = cfdState ? cfdState.fedMaxToxicity : 0.05;
 
   return (
     <aside className="w-80 bg-slate-900 border-l border-slate-800 p-3.5 flex flex-col gap-3 shrink-0 h-full overflow-y-auto text-slate-200 text-xs">
@@ -84,42 +100,70 @@ export const RightStatusPanel: React.FC<RightStatusPanelProps> = ({
         </div>
       )}
 
-      {/* 2. SITUAÇÃO ATUAL & DINÂMICA DE INCÊNDIO/FUMAÇA */}
+      {/* 2. SITUAÇÃO ATUAL & DINÂMICA DE INCÊNDIO/FUMAÇA (FDS REAL-TIME DATA) */}
       <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800 space-y-2">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-            <Flame className="w-3.5 h-3.5 text-amber-400" /> Dinâmica do Incêndio
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+            <Flame className="w-3.5 h-3.5 text-rose-500" /> Dinâmica FDS em Tempo Real
           </span>
-          <span className="text-[10px] font-mono text-cyan-400">4º Pavimento</span>
+          {onOpenFDSModal && (
+            <button
+              onClick={onOpenFDSModal}
+              className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 transition flex items-center gap-1"
+              title="Abrir Camada de Integração e Arquivos FDS"
+            >
+              <Database className="w-2.5 h-2.5" /> FDS v6.8
+            </button>
+          )}
         </div>
 
-        {/* Heat & Smoke Bars */}
-        <div className="space-y-1.5 pt-1">
+        {/* Heat & Smoke Physical Bars driven by FDS */}
+        <div className="space-y-2 pt-1">
           <div>
             <div className="flex justify-between text-[11px] mb-0.5">
               <span className="text-slate-400">Temperatura Foco (Quarto 408):</span>
-              <span className="font-bold text-rose-400 font-mono">285°C</span>
+              <span className="font-bold text-rose-400 font-mono">{displayPeakTemp}°C</span>
             </div>
             <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-              <div className="bg-gradient-to-r from-amber-500 to-rose-600 h-full" style={{ width: '75%' }} />
+              <div
+                className="bg-gradient-to-r from-amber-500 via-rose-500 to-rose-700 h-full transition-all duration-300"
+                style={{ width: `${Math.min(100, Math.round((displayPeakTemp / 800) * 100))}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-[9px] text-slate-500 mt-0.5 font-mono">
+              <span>HRR: {displayHRR} kW</span>
+              <span>Flashover: ~2800 kW</span>
             </div>
           </div>
 
           <div>
             <div className="flex justify-between text-[11px] mb-0.5">
-              <span className="text-slate-400">Densidade da Fumaça no Corredor:</span>
-              <span className="font-bold text-amber-400 font-mono">
-                {Math.round(smokeSpreadLevel * 100)}% (Camada a 1.6m)
+              <span className="text-slate-400">Visibilidade Jin Corredor:</span>
+              <span className={`font-bold font-mono ${displayVisibility <= 3.0 ? 'text-rose-400 animate-pulse' : displayVisibility <= 8.0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                {displayVisibility}m ({displaySmokePct}%)
               </span>
             </div>
             <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
               <div
-                className="bg-slate-400 h-full transition-all"
-                style={{ width: `${Math.round(smokeSpreadLevel * 100)}%` }}
+                className={`h-full transition-all duration-300 ${displayVisibility <= 3.0 ? 'bg-rose-500' : displayVisibility <= 8.0 ? 'bg-amber-400' : 'bg-slate-400'}`}
+                style={{ width: `${displaySmokePct}%` }}
               />
+            </div>
+            <div className="flex justify-between text-[9px] text-slate-500 mt-0.5 font-mono">
+              <span>Camada: {displayLayerHeight}m do piso</span>
+              <span>CO: {displayCO} ppm | FED: {displayFED}</span>
             </div>
           </div>
         </div>
+
+        {onOpenFDSModal && (
+          <button
+            onClick={onOpenFDSModal}
+            className="w-full mt-1.5 py-1 text-[10px] bg-slate-900 hover:bg-slate-850 text-slate-300 hover:text-amber-300 border border-slate-800 rounded font-medium flex items-center justify-center gap-1 transition"
+          >
+            <Gauge className="w-3 h-3 text-cyan-400" /> Inspecionar Saídas e Arquivos FDS
+          </button>
+        )}
       </div>
 
       {/* 3. ROTAS DE FUGA & ALERTAS */}

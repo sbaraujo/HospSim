@@ -20,7 +20,8 @@ import {
   SimulationDecisionRecord,
   SimulationLogEntry,
   EvaluationResult,
-  ReportData
+  ReportData,
+  CFDSimulationState
 } from './types';
 
 import {
@@ -53,6 +54,7 @@ import { ConfigSyncModal } from './components/ConfigSyncModal';
 import { ScenarioEngineModal } from './components/ScenarioEngineModal';
 import { HospitalProtectionConfigModal } from './components/HospitalProtectionConfigModal';
 import { ReferenceBenchmarksModal } from './components/ReferenceBenchmarksModal';
+import { FDSIntegrationModal } from './components/FDSIntegrationModal';
 
 import {
   Play,
@@ -92,6 +94,10 @@ export default function App() {
   const [isScenarioEngineModalOpen, setIsScenarioEngineModalOpen] = useState(false);
   const [isHospitalProtectionModalOpen, setIsHospitalProtectionModalOpen] = useState(false);
   const [isReferenceBenchmarksModalOpen, setIsReferenceBenchmarksModalOpen] = useState(false);
+  const [isFDSModalOpen, setIsFDSModalOpen] = useState(false);
+
+  // CFD Fire Dynamics Simulator State (Authoritative physical engine)
+  const [cfdState, setCfdState] = useState<CFDSimulationState>(cfdSolver.getState());
 
   // Entities Data
   const [hospital, setHospital] = useState<Hospital>(INITIAL_HOSPITAL);
@@ -190,6 +196,19 @@ export default function App() {
       setElapsedSeconds((prev) => {
         const nextElapsed = prev + 1;
 
+        // ADVANCE FDS (FIRE DYNAMICS SIMULATOR) INTEGRATION LAYER IN REAL TIME
+        // Replaces heuristic estimates with calibrated physical FDS output datasets
+        cfdSolver.step(1, {
+          isStairADoorOpen: isNorthStairBlocked,
+          stairPressurizationActive: !isNorthStairBlocked,
+          isFireDoorClosed: true,
+          activeFloorId: selectedFloorId || 4
+        });
+        const currentCfd = cfdSolver.getState();
+        setCfdState(currentCfd);
+        setFireSpreadLevel(cfdSolver.getPhysicalFireSpread());
+        setSmokeSpreadLevel(cfdSolver.getPhysicalSmokeSpread());
+
         // Check if a scheduled event should trigger
         const nextEvent = activeScenario.events.find(
           (ev, idx) => idx > currentEventIndex && ev.triggerTimeSec <= nextElapsed
@@ -248,13 +267,37 @@ export default function App() {
 
     // Apply consequences to fire, smoke, stair blockage and patients
     const csq = option.consequence;
-    setFireSpreadLevel((prev) => Math.max(0, Math.min(1, prev + csq.fireSpreadDelta)));
-    setSmokeSpreadLevel((prev) => Math.max(0, Math.min(1, prev + csq.smokeSpreadDelta)));
+
+    // Physical coupling with FDS engine
+    const optLower = (option.label + ' ' + (csq.description || '')).toLowerCase();
+    if (optLower.includes('sprinkler') || optLower.includes('chuveiro')) {
+      cfdSolver.sprinklersSuppression = true;
+    }
+    if (optLower.includes('porta') || optLower.includes('cortina') || optLower.includes('compartiment')) {
+      cfdSolver.isFireDoorClosed = true;
+    }
+    if (optLower.includes('pressuriza')) {
+      cfdSolver.stairPressurizationActive = true;
+    }
+    if (optLower.includes('oxig') || optLower.includes('gases')) {
+      cfdSolver.currentHRRKw = Math.min(cfdSolver.currentHRRKw, 1100);
+    }
 
     if (csq.compromisesStairId === 'escada-norte') {
       setIsNorthStairBlocked(true);
+      cfdSolver.isStairADoorOpen = true;
       setEmergencyLevel('vermelho_evacuacao_geral');
     }
+
+    cfdSolver.updateTime(elapsedSeconds, {
+      isStairADoorOpen: csq.compromisesStairId === 'escada-norte' ? true : isNorthStairBlocked,
+      sprinklersActive: cfdSolver.sprinklersSuppression,
+      isFireDoorClosed: cfdSolver.isFireDoorClosed
+    });
+
+    setCfdState(cfdSolver.getState());
+    setFireSpreadLevel(cfdSolver.getPhysicalFireSpread());
+    setSmokeSpreadLevel(cfdSolver.getPhysicalSmokeSpread());
 
     // Evacuate patients if consequence specifies
     if (csq.evacuatesPatientsCount && csq.evacuatesPatientsCount > 0) {
@@ -454,6 +497,12 @@ export default function App() {
     cfdSolver.smokeExtractionActive = !formConfig.smokeExtractionFailure;
     cfdSolver.initializeMesh();
     cfdSolver.initializeProbes();
+    cfdSolver.updateTime(0);
+
+    const initialCfd = cfdSolver.getState();
+    setCfdState(initialCfd);
+    setFireSpreadLevel(cfdSolver.getPhysicalFireSpread());
+    setSmokeSpreadLevel(cfdSolver.getPhysicalSmokeSpread());
 
     setIsNorthStairBlocked(formConfig.stairABlocked);
 
@@ -629,6 +678,7 @@ export default function App() {
           onSelectTab={(tab) => {
             setActiveTab(tab);
             if (tab === 'motor_cenarios') setIsScenarioEngineModalOpen(true);
+            if (tab === 'fds_integration') setIsFDSModalOpen(true);
             if (tab === 'protecao_incendio' || tab === 'hospital' || tab === 'pavimentos' || tab === 'edificacao' || tab === 'ambientes') {
               setIsHospitalProtectionModalOpen(true);
             }
@@ -665,6 +715,8 @@ export default function App() {
                 isNorthStairBlocked={isNorthStairBlocked}
                 selectedRoomId={selectedRoom?.id}
                 onOpenReferences={() => setIsReferenceBenchmarksModalOpen(true)}
+                cfdState={cfdState}
+                onOpenFDSModal={() => setIsFDSModalOpen(true)}
               />
             </div>
           ) : activeTab === 'comando_c3' ? (
@@ -680,6 +732,8 @@ export default function App() {
                 simulatedTimeStr={getSimulatedTimeStr()}
                 onDispatchTeam={handleDispatchTeam}
                 onTriggerRadioBroadcast={handleTriggerRadioBroadcast}
+                cfdState={cfdState}
+                onOpenFDSModal={() => setIsFDSModalOpen(true)}
               />
             </div>
           ) : (
@@ -738,6 +792,8 @@ export default function App() {
           isNorthStairBlocked={isNorthStairBlocked}
           fireSpreadLevel={fireSpreadLevel}
           smokeSpreadLevel={smokeSpreadLevel}
+          cfdState={cfdState}
+          onOpenFDSModal={() => setIsFDSModalOpen(true)}
           onSelectPatient={(p) => {
             setSelectedPatient(p);
             setIsPatientsModalOpen(true);
@@ -831,6 +887,18 @@ export default function App() {
         syncStatus={syncStatus}
         onTriggerSync={() => syncService.triggerSync()}
         onResetDatabase={handleResetDatabase}
+      />
+
+      {/* FDS (Fire Dynamics Simulator v6.8) Integration Layer Modal */}
+      <FDSIntegrationModal
+        isOpen={isFDSModalOpen}
+        onClose={() => setIsFDSModalOpen(false)}
+        cfdState={cfdState}
+        onDatasetChanged={(dataset) => {
+          setCfdState(cfdSolver.getState());
+          setFireSpreadLevel(cfdSolver.getPhysicalFireSpread());
+          setSmokeSpreadLevel(cfdSolver.getPhysicalSmokeSpread());
+        }}
       />
     </div>
   );

@@ -340,12 +340,71 @@ export interface CFDProbeSensor {
   historyVisibilities: number[];
 }
 
+// ==========================================
+// FDS (FIRE DYNAMICS SIMULATOR) INTEGRATION TYPES
+// ==========================================
+
+export interface FDSDeviceChannel {
+  id: string; // Device ID (e.g., 'HRR', 'TEMP_408', 'VIS_CORR')
+  name: string; // Human label
+  quantity: 'TEMPERATURE' | 'VISIBILITY' | 'HEAT RELEASE RATE' | 'VOLUME FRACTION' | 'PRESSURE' | 'VELOCITY' | 'OPTICAL DENSITY' | 'FED' | string;
+  unit: 'C' | 'kW' | 'm' | 'ppm' | 'Pa' | 'm/s' | '1/m' | '%' | '' | 'FED' | string;
+  timeSeries: [number, number][]; // [timeSeconds, value]
+}
+
+export interface FDSSliceGridFrame {
+  timeSec: number;
+  cells: {
+    x: number;
+    y: number;
+    tempC: number;
+    visibilityM: number;
+    coPpm: number;
+    smokeOpticalDensity: number;
+    uVel: number;
+    vVel: number;
+  }[];
+}
+
+export interface FDSDataset {
+  id: string;
+  name: string;
+  sourceType: 'nist_fds_output_file' | 'pyrosim_export' | 'fds_devc_csv' | 'calibrated_benchmark';
+  fileName?: string;
+  importedAt: string;
+  fdsVersion: string; // e.g. 'FDS 6.8.0'
+  durationSec: number;
+  timeStepSec: number;
+  meshResolutionM: number;
+  channels: FDSDeviceChannel[];
+  sliceFrames: FDSSliceGridFrame[];
+  description: string;
+}
+
+export interface FDSFileParseResult {
+  success: boolean;
+  formatDetected: 'FDS_DEVC_CSV' | 'FDS_HRR_CSV' | 'FDS_JSON' | 'CUSTOM_CSV' | 'UNKNOWN';
+  fileName: string;
+  dataset?: FDSDataset;
+  error?: string;
+  channelsFoundCount: number;
+  timeRowsCount: number;
+  durationSec: number;
+}
+
 export interface CFDSimulationState {
   stepCount: number;
   elapsedSec: number;
   currentHRRKw: number; // Heat Release Rate in kW (ex: 2500 kW = 2.5 MW)
   peakTempC: number;
   averageCorridorVisibilityM: number;
+  smokeLayerHeightM: number;
+  coMaxPpm: number;
+  fedMaxToxicity: number;
+  fireSpreadNormalized: number; // 0 to 1 based on FDS physics
+  smokeSpreadNormalized: number; // 0 to 1 based on FDS physics
+  isFDSDataDriven: boolean;
+  fdsDataSourceName: string;
   smokeExhaustFanActive: boolean;
   stairPressurizationActive: boolean;
   sprinklersTrippedCount: number;

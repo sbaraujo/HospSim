@@ -10,7 +10,8 @@ import {
   ResourceItem,
   Patient,
   Equipment,
-  SimulationLogEntry
+  SimulationLogEntry,
+  CFDSimulationState
 } from '../types';
 import {
   Radio,
@@ -25,7 +26,9 @@ import {
   Clock,
   Layers,
   Wrench,
-  Stethoscope
+  Stethoscope,
+  Database,
+  Gauge
 } from 'lucide-react';
 
 interface C3CommandPanelProps {
@@ -39,6 +42,8 @@ interface C3CommandPanelProps {
   simulatedTimeStr: string;
   onDispatchTeam: (teamId: string, task: string) => void;
   onTriggerRadioBroadcast: (message: string) => void;
+  onOpenFDSModal?: () => void;
+  cfdState?: CFDSimulationState;
 }
 
 export const C3CommandPanel: React.FC<C3CommandPanelProps> = ({
@@ -51,7 +56,9 @@ export const C3CommandPanel: React.FC<C3CommandPanelProps> = ({
   logs,
   simulatedTimeStr,
   onDispatchTeam,
-  onTriggerRadioBroadcast
+  onTriggerRadioBroadcast,
+  onOpenFDSModal,
+  cfdState
 }) => {
   const [activeTab, setActiveTab] = useState<'local_vs_geral' | 'equipes' | 'recursos' | 'comunicacao'>('local_vs_geral');
   const [customRadioMsg, setCustomRadioMsg] = useState('');
@@ -91,8 +98,25 @@ export const C3CommandPanel: React.FC<C3CommandPanelProps> = ({
           </div>
         </div>
 
-        {/* Emergency Escalation Selector */}
-        <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-lg border border-slate-800">
+        <div className="flex items-center gap-2">
+          {onOpenFDSModal && (
+            <button
+              onClick={onOpenFDSModal}
+              className="px-2.5 py-1 text-xs font-semibold rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition flex items-center gap-1.5"
+              title="Abrir Camada FDS e Telemetria Física Real"
+            >
+              <Database className="w-3.5 h-3.5 text-amber-400" />
+              <span>FDS v6.8</span>
+              {cfdState && (
+                <span className="font-mono text-[10px] text-amber-200 bg-amber-950/80 px-1 py-0.2 rounded border border-amber-500/30">
+                  {cfdState.peakTempC}°C | {cfdState.currentHRRKw}kW
+                </span>
+              )}
+            </button>
+          )}
+
+          {/* Emergency Escalation Selector */}
+          <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-lg border border-slate-800">
           <button
             onClick={() => onSetEmergencyLevel('amarelo_alerta')}
             className={`px-2.5 py-1 text-xs font-semibold rounded transition ${
@@ -124,6 +148,7 @@ export const C3CommandPanel: React.FC<C3CommandPanelProps> = ({
             Evacuação Geral (Fase 3)
           </button>
         </div>
+      </div>
       </div>
 
       {/* C3 Sub-Navigation Tabs */}

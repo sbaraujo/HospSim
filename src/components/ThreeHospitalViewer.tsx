@@ -5,7 +5,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { Floor, Room, Patient, Team, CFDVisualizationMode, CFDProbeSensor } from '../types';
+import { Floor, Room, Patient, Team, CFDVisualizationMode, CFDProbeSensor, CFDSimulationState } from '../types';
 import { cfdSolver } from '../services/cfdEngine';
 import { 
   Eye, 
@@ -23,7 +23,8 @@ import {
   Sliders,
   ExternalLink,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Database
 } from 'lucide-react';
 
 interface ThreeHospitalViewerProps {
@@ -40,6 +41,8 @@ interface ThreeHospitalViewerProps {
   isNorthStairBlocked: boolean;
   selectedRoomId?: string | null;
   onOpenReferences?: () => void;
+  onOpenFDSModal?: () => void;
+  cfdState?: CFDSimulationState;
 }
 
 export const ThreeHospitalViewer: React.FC<ThreeHospitalViewerProps> = ({
@@ -55,7 +58,9 @@ export const ThreeHospitalViewer: React.FC<ThreeHospitalViewerProps> = ({
   smokeSpreadLevel,
   isNorthStairBlocked,
   selectedRoomId,
-  onOpenReferences
+  onOpenReferences,
+  onOpenFDSModal,
+  cfdState
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -74,7 +79,15 @@ export const ThreeHospitalViewer: React.FC<ThreeHospitalViewerProps> = ({
   // CFD Fire Dynamics Simulator State
   const [cfdMode, setCfdMode] = useState<'padrao_3d' | CFDVisualizationMode>('padrao_3d');
   const [showCFDProbes, setShowCFDProbes] = useState(false);
-  const [cfdTelemetry, setCfdTelemetry] = useState(cfdSolver.getState());
+  const [cfdTelemetry, setCfdTelemetry] = useState(cfdState || cfdSolver.getState());
+
+  useEffect(() => {
+    if (cfdState) {
+      setCfdTelemetry(cfdState);
+    } else {
+      setCfdTelemetry(cfdSolver.getState());
+    }
+  }, [cfdState, fireSpreadLevel, smokeSpreadLevel]);
 
   // Interaction state
   const isDraggingRef = useRef(false);
@@ -948,6 +961,16 @@ export const ThreeHospitalViewer: React.FC<ThreeHospitalViewerProps> = ({
           >
             Pathfinder Streamlines
           </button>
+
+          {onOpenFDSModal && (
+            <button
+              onClick={onOpenFDSModal}
+              className="px-2 py-0.5 text-xs rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 transition flex items-center gap-1 font-semibold ml-1"
+              title="Configurar Arquivos FDS e Cenários Físicos NIST"
+            >
+              <Database className="w-3 h-3" /> FDS v6.8
+            </button>
+          )}
         </div>
       </div>
 
