@@ -19,7 +19,8 @@ import {
   Building2,
   GraduationCap,
   BookOpen,
-  FileCheck
+  FileCheck,
+  MapPin
 } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
 
@@ -39,6 +40,8 @@ interface TopBarProps {
   onEndSimulation: () => void;
   onTriggerSync: () => void;
   onChangeMode: (mode: SimulationMode) => void;
+  onOpenManualModal?: () => void;
+  onOpenGeolocationModal?: () => void;
   onGenerateManualPDF?: () => void;
   onGenerateReportPDF?: () => void;
 }
@@ -59,6 +62,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   onEndSimulation,
   onTriggerSync,
   onChangeMode,
+  onOpenManualModal,
+  onOpenGeolocationModal,
   onGenerateManualPDF,
   onGenerateReportPDF
 }) => {
@@ -198,16 +203,30 @@ export const TopBar: React.FC<TopBarProps> = ({
           <Square className="w-3.5 h-3.5" /> Encerrar
         </button>
 
-        {/* The Two Official System & Exercise PDF Buttons */}
+        {/* The Official System, Geolocation & Exercise PDF Buttons */}
         <div className="flex items-center gap-1.5 pl-2 border-l border-slate-800">
-          {onGenerateManualPDF && (
+          {onOpenGeolocationModal && (
             <button
-              onClick={onGenerateManualPDF}
+              onClick={onOpenGeolocationModal}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-rose-950/80 hover:bg-rose-900 border border-rose-700/80 text-rose-200 transition shadow hover:shadow-rose-500/20"
+              title="Geolocalização do Hospital e Unidades do Corpo de Bombeiros mais próximas (Google Maps Grounding)"
+            >
+              <MapPin className="w-3.5 h-3.5 text-rose-400" />
+              <span className="hidden md:inline">Geoloc & Bombeiros</span>
+            </button>
+          )}
+
+          {(onOpenManualModal || onGenerateManualPDF) && (
+            <button
+              onClick={() => {
+                if (onOpenManualModal) onOpenManualModal();
+                else if (onGenerateManualPDF) onGenerateManualPDF();
+              }}
               className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/80 text-indigo-200 transition shadow hover:shadow-indigo-500/20"
-              title="Gerar e Baixar o Manual Completo do Sistema HEDS em PDF"
+              title="Abrir o Manual Completo do Sistema HEDS (50 Páginas com Ilustrações e Normas)"
             >
               <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
-              <span className="hidden md:inline">Manual do Sistema</span>
+              <span className="hidden md:inline">Manual (50 Pág)</span>
             </button>
           )}
 

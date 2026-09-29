@@ -15,7 +15,8 @@ import {
   FDSDataset,
   FDSFileParseResult,
   CFDSimulationState,
-  FDSThermocoupleProbe
+  FDSThermocoupleProbe,
+  CFDProbeSensor
 } from '../types';
 import { cfdSolver } from '../services/cfdEngine';
 import { interpolateSeries } from '../services/fdsDatasets';
@@ -41,7 +42,17 @@ import {
   User,
   Bed,
   Eye,
-  ChevronRight
+  ChevronRight,
+  MapPin,
+  Plus,
+  Trash2,
+  Crosshair,
+  Compass,
+  Cpu,
+  Zap,
+  ShieldCheck,
+  Move,
+  Target
 } from 'lucide-react';
 
 interface FDSIntegrationModalProps {
@@ -51,7 +62,7 @@ interface FDSIntegrationModalProps {
   onDatasetChanged: (dataset: FDSDataset) => void;
 }
 
-type ModalTab = 'stratification' | 'channels' | 'datasets';
+type ModalTab = 'stratification' | 'channels' | 'datasets' | 'probe_placement';
 type LocationRakeGroup = 'origin_room_408' | 'corridor_center' | 'all';
 
 export const FDSIntegrationModal: React.FC<FDSIntegrationModalProps> = ({
@@ -68,6 +79,15 @@ export const FDSIntegrationModal: React.FC<FDSIntegrationModalProps> = ({
   const [scrubbedTime, setScrubbedTime] = useState<number | null>(null);
   const [hiddenProbeIds, setHiddenProbeIds] = useState<Set<string>>(new Set());
   const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Probe Placement State
+  const [selectedProbeId, setSelectedProbeId] = useState<string | null>(cfdSolver.probes[0]?.id || null);
+  const [probePlacementMode, setProbePlacementMode] = useState<'inspect' | 'place_new'>('inspect');
+  const [newProbeName, setNewProbeName] = useState<string>('Sonda Leito UTI 402');
+  const [newProbeLocation, setNewProbeLocation] = useState<string>('Ala Oeste / Leito Monitorado');
+  const [newProbeHeight, setNewProbeHeight] = useState<number>(1.8);
+  const [hoveredCell, setHoveredCell] = useState<{ gridX: number; gridY: number; worldX: number; worldZ: number } | null>(null);
+  const [probeChangeCounter, setProbeChangeCounter] = useState<number>(0);
 
   if (!isOpen) return null;
 
@@ -107,19 +127,24 @@ export const FDSIntegrationModal: React.FC<FDSIntegrationModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setUploadMessage({
+      type: 'success',
+      text: `Processando "${file.name}" em Web Worker dedicado...`
+    });
+
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const content = event.target?.result as string;
       if (!content) return;
 
-      const result: FDSFileParseResult = cfdSolver.parseFDSFile(content, file.name);
+      const result: FDSFileParseResult = await cfdSolver.parseFDSFileAsync(content, file.name);
 
       if (result.success && result.dataset) {
         cfdSolver.loadFDSDataset(result.dataset);
         onDatasetChanged(result.dataset);
         setUploadMessage({
           type: 'success',
-          text: `Arquivo "${file.name}" carregado com sucesso (${result.formatDetected})! ${result.channelsFoundCount} canais instrumentados e ${result.timeRowsCount} passos temporais processados.`
+          text: `Arquivo "${file.name}" carregado com sucesso via Web Worker (${result.formatDetected})! ${result.channelsFoundCount} canais instrumentados e ${result.timeRowsCount} passos temporais processados off-thread.`
         });
       } else {
         setUploadMessage({
@@ -272,12 +297,31 @@ export const FDSIntegrationModal: React.FC<FDSIntegrationModalProps> = ({
               <Database className="w-3.5 h-3.5" />
               Datasets & Upload FDS
             </button>
+            <button
+              onClick={() => setActiveTab('probe_placement')}
+              className={`px-3.5 py-1.5 rounded-md font-medium flex items-center gap-2 transition ${
+                activeTab === 'probe_placement'
+                  ? 'bg-rose-600/30 text-rose-300 border border-rose-500/50 shadow-xs font-bold'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <MapPin className="w-3.5 h-3.5 text-rose-400" />
+              Posicionamento de Probes (2D/3D)
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-500/20 text-rose-300 font-bold border border-rose-500/30">
+                {cfdSolver.probes.length}
+              </span>
+            </button>
           </div>
 
-          <div className="text-[11px] text-slate-400 font-mono flex items-center gap-3">
+          <div className="text-[11px] text-slate-400 font-mono flex flex-wrap items-center gap-2.5">
             <span>Dataset Ativo: <strong className="text-amber-400">{currentDataset.name}</strong></span>
             <span>•</span>
             <span>Tempo Ativo: <strong className="text-cyan-400">{currentTime}s</strong></span>
+            <span>•</span>
+            <span className="flex items-center gap-1 text-cyan-300 font-bold bg-indigo-950/80 px-2 py-0.5 rounded border border-cyan-500/30">
+              <Cpu className="w-3 h-3 text-cyan-400" />
+              <span>Web Worker CFD: Thread Paralela (60 FPS)</span>
+            </span>
           </div>
         </div>
 
@@ -1005,6 +1049,605 @@ export const FDSIntegrationModal: React.FC<FDSIntegrationModalProps> = ({
                     </button>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: INTERFACE DE POSICIONAMENTO DE PROBES (SENSORES VIRTUAIS 2D / 3D) */}
+          {activeTab === 'probe_placement' && (
+            <div className="space-y-4">
+              {/* Header Status & Action Bar */}
+              <div className="p-4 bg-slate-950/90 rounded-xl border border-rose-500/30 flex flex-wrap items-center justify-between gap-3 shadow-lg">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-rose-600/20 text-rose-400 border border-rose-500/40 rounded-lg">
+                    <MapPin className="w-5 h-5 animate-bounce" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      Instrumentação Virtual de CFD & FDS (Posicionamento de Sensores)
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                        {cfdSolver.probes.length} Sondas Ativas
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Clique em qualquer ponto da planta 2D para posicionar sensores virtuais e monitorar temperatura (°C), visibilidade (m) e gases em tempo real.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setProbePlacementMode('place_new');
+                      setSelectedProbeId(null);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
+                      probePlacementMode === 'place_new'
+                        ? 'bg-rose-600 text-white shadow-md ring-2 ring-rose-400'
+                        : 'bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700'
+                    }`}
+                  >
+                    <Plus className="w-4 h-4 text-rose-300" /> + Adicionar Nova Sonda
+                  </button>
+                  <button
+                    onClick={() => setProbePlacementMode('inspect')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
+                      probePlacementMode === 'inspect'
+                        ? 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-400'
+                        : 'bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700'
+                    }`}
+                  >
+                    <Crosshair className="w-4 h-4 text-cyan-300" /> Inspecionar / Mover
+                  </button>
+                </div>
+              </div>
+
+              {/* Presets Quick-Placement Bar */}
+              <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-1 flex items-center gap-1">
+                  <Target className="w-3.5 h-3.5 text-amber-400" /> Atalhos Táticos:
+                </span>
+                {[
+                  { name: '🔥 Quarto 408 (Foco)', label: 'Origem do Incêndio / Leito 408', x: 21, y: 15 },
+                  { name: '🏢 Corredor Posto Enfermagem', label: 'Eixo Central / Posto Enfermagem', x: 18, y: 10 },
+                  { name: '🚪 Escada Norte (Fuga A)', label: 'Entrada da Escada Norte', x: 3, y: 3 },
+                  { name: '🛡️ Escada Sul Pressurizada', label: 'Escada de Incêndio Pressurizada', x: 3, y: 16 },
+                  { name: '🏥 Área Refúgio Leste (P-90)', label: 'Setor Seguro Estanque / Leste', x: 31, y: 10 },
+                  { name: '🛏️ Leito UTI 402', label: 'Ala Oeste / Leito Crítico 402', x: 12, y: 15 }
+                ].map((preset, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      const newP = cfdSolver.addCustomProbe(preset.name, preset.label, preset.x, preset.y, 1.8);
+                      setSelectedProbeId(newP.id);
+                      setProbeChangeCounter(c => c + 1);
+                    }}
+                    className="px-2.5 py-1 rounded-md bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-700 transition flex items-center gap-1 font-medium text-[11px]"
+                  >
+                    {preset.name}
+                  </button>
+                ))}
+              </div>
+
+              {/* Main Workspace: Interactive 2D Floor Plan (Left) + Selected Probe Editor (Right) */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                {/* 2D Interactive Floor Plan Canvas / SVG (8 Cols) */}
+                <div className="lg:col-span-8 bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col space-y-2">
+                  <div className="flex items-center justify-between text-xs pb-1 border-b border-slate-800/80">
+                    <div className="flex items-center gap-2">
+                      <Compass className="w-4 h-4 text-cyan-400" />
+                      <span className="font-bold text-white uppercase tracking-wider">
+                        Planta Baixa 2D do 4º Pavimento (Grade CFD 36m x 20m)
+                      </span>
+                    </div>
+                    {hoveredCell ? (
+                      <span className="font-mono text-cyan-300 font-bold bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-800/50 text-[11px]">
+                        X: {hoveredCell.worldX >= 0 ? '+' : ''}{hoveredCell.worldX}m | Z: {hoveredCell.worldZ >= 0 ? '+' : ''}{hoveredCell.worldZ}m (Grade {hoveredCell.gridX}, {hoveredCell.gridY})
+                      </span>
+                    ) : (
+                      <span className="text-slate-500 text-[11px]">
+                        Passe o mouse ou clique para posicionar
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Interactive SVG Hospital Floor */}
+                  <div className="relative w-full aspect-[36/20] bg-slate-950 rounded-lg overflow-hidden border border-slate-800 shadow-inner select-none cursor-crosshair">
+                    <svg
+                      viewBox="0 0 720 400"
+                      className="w-full h-full"
+                      onMouseMove={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const px = e.clientX - rect.left;
+                        const py = e.clientY - rect.top;
+                        const gx = Math.max(0, Math.min(35, Math.floor((px / rect.width) * 36)));
+                        const gy = Math.max(0, Math.min(19, Math.floor((py / rect.height) * 20)));
+                        const wx = Math.round((gx - 18) * 1.0 * 10) / 10;
+                        const wz = Math.round((gy - 10) * 1.0 * 10) / 10;
+                        setHoveredCell({ gridX: gx, gridY: gy, worldX: wx, worldZ: wz });
+                      }}
+                      onMouseLeave={() => setHoveredCell(null)}
+                      onClick={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const px = e.clientX - rect.left;
+                        const py = e.clientY - rect.top;
+                        const gx = Math.max(0, Math.min(35, Math.floor((px / rect.width) * 36)));
+                        const gy = Math.max(0, Math.min(19, Math.floor((py / rect.height) * 20)));
+
+                        if (probePlacementMode === 'place_new') {
+                          const p = cfdSolver.addCustomProbe(newProbeName, newProbeLocation, gx, gy, newProbeHeight);
+                          setSelectedProbeId(p.id);
+                          setProbePlacementMode('inspect');
+                          setProbeChangeCounter(c => c + 1);
+                        } else if (selectedProbeId) {
+                          cfdSolver.updateProbePosition(selectedProbeId, gx, gy);
+                          setProbeChangeCounter(c => c + 1);
+                        }
+                      }}
+                    >
+                      {/* Finite Volume CFD Cells Background */}
+                      {cfdSolver.grid.map((row, y) =>
+                        row.map((cell, x) => {
+                          const px = x * 20;
+                          const py = y * 20;
+                          let fill = '#0a0f1d';
+                          if (cell.isWall) fill = '#1e293b';
+                          else if (cell.isFireSource) fill = '#7f1d1d';
+                          else if (cell.isRefugeZone) fill = '#064e3b';
+                          else if (cell.tempC > 150) fill = '#991b1b';
+                          else if (cell.tempC > 60) fill = '#c2410c';
+                          else if (cell.tempC > 38) fill = '#854d0e';
+                          else if (y >= 8 && y <= 11) fill = '#172554'; // corridor
+
+                          return (
+                            <rect
+                              key={`${x}-${y}`}
+                              x={px}
+                              y={py}
+                              width={20}
+                              height={20}
+                              fill={fill}
+                              stroke="#0f172a"
+                              strokeWidth={0.5}
+                              opacity={cell.isWall ? 1.0 : 0.85}
+                            />
+                          );
+                        })
+                      )}
+
+                      {/* Floor Compartment Labels */}
+                      <text x="440" y="325" fill="#fca5a5" fontSize="11" fontWeight="bold">
+                        🔥 Quarto 408 (Incêndio)
+                      </text>
+                      <text x="360" y="200" fill="#93c5fd" fontSize="11" fontWeight="bold" textAnchor="middle">
+                        Corredor Central de Evacuação
+                      </text>
+                      <text x="630" y="200" fill="#6ee7b7" fontSize="11" fontWeight="bold" textAnchor="middle">
+                        Área de Refúgio Leste (P-90)
+                      </text>
+                      <text x="65" y="70" fill="#f87171" fontSize="10" fontWeight="bold">
+                        Escada Norte
+                      </text>
+                      <text x="65" y="335" fill="#34d399" fontSize="10" fontWeight="bold">
+                        Escada Sul (+50 Pa)
+                      </text>
+
+                      {/* Hover Crosshair Preview */}
+                      {hoveredCell && (
+                        <g>
+                          <rect
+                            x={hoveredCell.gridX * 20}
+                            y={hoveredCell.gridY * 20}
+                            width={20}
+                            height={20}
+                            fill="none"
+                            stroke="#38bdf8"
+                            strokeWidth="2"
+                            strokeDasharray="3 2"
+                          />
+                        </g>
+                      )}
+
+                      {/* Render All Probes on Floor Plan */}
+                      {cfdSolver.probes.map((probe) => {
+                        const cx = probe.gridX * 20 + 10;
+                        const cy = probe.gridY * 20 + 10;
+                        const isSelected = selectedProbeId === probe.id;
+                        const statusColor =
+                          probe.tenabilityStatus === 'tenivel'
+                            ? '#10b981'
+                            : probe.tenabilityStatus === 'alerta_moderado'
+                            ? '#f59e0b'
+                            : '#ef4444';
+
+                        return (
+                          <g
+                            key={probe.id}
+                            className="cursor-pointer transition-transform"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedProbeId(probe.id);
+                            }}
+                          >
+                            {/* Halo ring if selected */}
+                            {isSelected && (
+                              <circle
+                                cx={cx}
+                                cy={cy}
+                                r={18}
+                                fill="none"
+                                stroke="#38bdf8"
+                                strokeWidth="2.5"
+                                strokeDasharray="4 2"
+                                className="animate-spin"
+                              />
+                            )}
+
+                            {/* Base Pulsing Circle */}
+                            <circle
+                              cx={cx}
+                              cy={cy}
+                              r={12}
+                              fill={statusColor}
+                              fillOpacity={0.25}
+                              stroke={statusColor}
+                              strokeWidth={1.5}
+                            />
+
+                            {/* Pin Core */}
+                            <circle cx={cx} cy={cy} r={6.5} fill={statusColor} />
+                            <circle cx={cx} cy={cy} r={2.5} fill="#ffffff" />
+
+                            {/* Probe Info Badge Tag */}
+                            <g transform={`translate(${cx}, ${cy - 16})`}>
+                              <rect
+                                x="-52"
+                                y="-18"
+                                width="104"
+                                height="18"
+                                rx="4"
+                                fill="#020617"
+                                fillOpacity="0.92"
+                                stroke={isSelected ? '#38bdf8' : statusColor}
+                                strokeWidth={isSelected ? 1.8 : 1}
+                              />
+                              <text
+                                x="0"
+                                y="-6"
+                                fill="#f8fafc"
+                                fontSize="9"
+                                fontWeight="bold"
+                                textAnchor="middle"
+                              >
+                                {probe.tempC}°C • {probe.visibilityM}m
+                              </text>
+                            </g>
+                          </g>
+                        );
+                      })}
+                    </svg>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> Tenível (&lt;38°C)
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block ml-2" /> Alerta (38–60°C)
+                      <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block ml-2" /> Inabitável (&gt;60°C)
+                    </span>
+                    <span className="font-mono text-slate-500">
+                      Escala: 1 célula = 1.0m x 1.0m
+                    </span>
+                  </div>
+                </div>
+
+                {/* Selected Probe Configuration Card (4 Cols) */}
+                <div className="lg:col-span-4 bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col justify-between space-y-4">
+                  {selectedProbeId ? (
+                    (() => {
+                      const probe = cfdSolver.probes.find(p => p.id === selectedProbeId) || cfdSolver.probes[0];
+                      if (!probe) return null;
+
+                      const worldX = Math.round((probe.gridX - 18) * 10) / 10;
+                      const worldZ = Math.round((probe.gridY - 10) * 10) / 10;
+
+                      return (
+                        <div className="space-y-3.5">
+                          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                            <div className="flex items-center gap-1.5">
+                              <MapPin className="w-4 h-4 text-rose-400" />
+                              <span className="font-bold text-white text-xs uppercase tracking-wider">
+                                Parâmetros do Sensor
+                              </span>
+                            </div>
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                probe.tenabilityStatus === 'tenivel'
+                                  ? 'bg-emerald-500/20 text-emerald-400'
+                                  : probe.tenabilityStatus === 'alerta_moderado'
+                                  ? 'bg-amber-500/20 text-amber-400'
+                                  : 'bg-rose-500/20 text-rose-400 animate-pulse'
+                              }`}
+                            >
+                              {probe.tenabilityStatus === 'tenivel' ? 'Tenível' : probe.tenabilityStatus === 'alerta_moderado' ? 'Alerta' : 'Crítico'}
+                            </span>
+                          </div>
+
+                          {/* Probe Name Input */}
+                          <div>
+                            <label className="text-[11px] text-slate-400 font-semibold block mb-1">
+                              Nome da Sonda:
+                            </label>
+                            <input
+                              type="text"
+                              value={probe.name}
+                              onChange={(e) => {
+                                probe.name = e.target.value;
+                                setProbeChangeCounter(c => c + 1);
+                              }}
+                              className="w-full bg-slate-900 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-white focus:outline-hidden focus:border-rose-500 font-medium"
+                            />
+                          </div>
+
+                          {/* Compartment Label */}
+                          <div>
+                            <label className="text-[11px] text-slate-400 font-semibold block mb-1">
+                              Compartimento / Setor:
+                            </label>
+                            <input
+                              type="text"
+                              value={probe.locationLabel}
+                              onChange={(e) => {
+                                probe.locationLabel = e.target.value;
+                                setProbeChangeCounter(c => c + 1);
+                              }}
+                              className="w-full bg-slate-900 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-white focus:outline-hidden focus:border-rose-500 font-medium"
+                            />
+                          </div>
+
+                          {/* Vertical Height (Z) Selector */}
+                          <div>
+                            <label className="text-[11px] text-slate-400 font-semibold block mb-1">
+                              Cota de Altura do Sensor (Estratificação Vertical):
+                            </label>
+                            <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                              {[
+                                { h: 0.5, label: '0.5m (Leito/Piso)' },
+                                { h: 1.2, label: '1.2m (Cadeirante)' },
+                                { h: 1.8, label: '1.8m (Em Pé / Fuga)' },
+                                { h: 2.4, label: '2.4m (Teto / Forro)' }
+                              ].map(({ h, label }) => (
+                                <button
+                                  key={h}
+                                  onClick={() => {
+                                    cfdSolver.updateProbePosition(probe.id, probe.gridX, probe.gridY, h);
+                                    setProbeChangeCounter(c => c + 1);
+                                  }}
+                                  className={`p-1.5 rounded-md border text-center transition font-semibold ${
+                                    (probe.heightM || 1.8) === h
+                                      ? 'bg-amber-600/30 text-amber-300 border-amber-500/50'
+                                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
+                                  }`}
+                                >
+                                  {label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Coordinate Nudging & Display */}
+                          <div className="p-3 bg-slate-900/90 rounded-lg border border-slate-800 space-y-2">
+                            <div className="flex justify-between text-[11px] font-mono">
+                              <span className="text-slate-400">Coordenadas Métricas:</span>
+                              <strong className="text-cyan-300">
+                                X: {worldX >= 0 ? '+' : ''}{worldX}m | Z: {worldZ >= 0 ? '+' : ''}{worldZ}m
+                              </strong>
+                            </div>
+
+                            <div className="flex items-center justify-center gap-1.5 pt-1">
+                              <button
+                                onClick={() => {
+                                  cfdSolver.updateProbePosition(probe.id, probe.gridX - 1, probe.gridY);
+                                  setProbeChangeCounter(c => c + 1);
+                                }}
+                                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded font-bold text-xs"
+                                title="Mover para Oeste (-1m)"
+                              >
+                                ◄
+                              </button>
+                              <div className="flex flex-col gap-1">
+                                <button
+                                  onClick={() => {
+                                    cfdSolver.updateProbePosition(probe.id, probe.gridX, probe.gridY - 1);
+                                    setProbeChangeCounter(c => c + 1);
+                                  }}
+                                  className="px-2.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded font-bold text-xs"
+                                  title="Mover para Norte (-1m)"
+                                >
+                                  ▲
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    cfdSolver.updateProbePosition(probe.id, probe.gridX, probe.gridY + 1);
+                                    setProbeChangeCounter(c => c + 1);
+                                  }}
+                                  className="px-2.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded font-bold text-xs"
+                                  title="Mover para Sul (+1m)"
+                                >
+                                  ▼
+                                </button>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  cfdSolver.updateProbePosition(probe.id, probe.gridX + 1, probe.gridY);
+                                  setProbeChangeCounter(c => c + 1);
+                                }}
+                                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded font-bold text-xs"
+                                title="Mover para Leste (+1m)"
+                              >
+                                ►
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Live Readings Metric Badges */}
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className="p-2 bg-slate-900 rounded border border-slate-800">
+                              <span className="text-[10px] text-slate-400 block">Temperatura:</span>
+                              <span className="text-base font-black text-rose-400 font-mono">
+                                {probe.tempC}°C
+                              </span>
+                            </div>
+                            <div className="p-2 bg-slate-900 rounded border border-slate-800">
+                              <span className="text-[10px] text-slate-400 block">Visibilidade:</span>
+                              <span className="text-base font-black text-cyan-400 font-mono">
+                                {probe.visibilityM} m
+                              </span>
+                            </div>
+                            <div className="p-2 bg-slate-900 rounded border border-slate-800">
+                              <span className="text-[10px] text-slate-400 block">Monóxido CO:</span>
+                              <span className="text-base font-black text-amber-400 font-mono">
+                                {probe.coPpm} ppm
+                              </span>
+                            </div>
+                            <div className="p-2 bg-slate-900 rounded border border-slate-800">
+                              <span className="text-[10px] text-slate-400 block">Toxicidade FED:</span>
+                              <span className="text-base font-black text-purple-400 font-mono">
+                                {probe.fedToxicity}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Delete Probe Button */}
+                          <div className="pt-2">
+                            <button
+                              onClick={() => {
+                                cfdSolver.removeProbe(probe.id);
+                                setSelectedProbeId(cfdSolver.probes[0]?.id || null);
+                                setProbeChangeCounter(c => c + 1);
+                              }}
+                              className="w-full py-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-500/40 font-semibold flex items-center justify-center gap-1.5 transition text-xs"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" /> Excluir Esta Sonda
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  ) : (
+                    <div className="text-center py-12 space-y-2 text-slate-400">
+                      <Crosshair className="w-8 h-8 mx-auto text-slate-600" />
+                      <p className="text-xs">Nenhuma sonda selecionada.</p>
+                      <p className="text-[11px] text-slate-500">
+                        Clique em uma sonda na planta ou selecione &quot;Adicionar Nova Sonda&quot;.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Complete Live Telemetry Probes Table */}
+              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-emerald-400" />
+                    <span className="font-bold text-white text-xs uppercase tracking-wider">
+                      Painel Geral de Sondas CFD (Tempo Real {currentTime}s)
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    Critérios de Tenibilidade: NFPA 101 & ISO 13571
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto border border-slate-800/80 rounded-lg">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-900 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-800 text-[10px]">
+                      <tr>
+                        <th className="p-2.5">Sonda / Compartimento</th>
+                        <th className="p-2.5">Coordenadas</th>
+                        <th className="p-2.5">Altura (Z)</th>
+                        <th className="p-2.5">Temperatura (°C)</th>
+                        <th className="p-2.5">Visibilidade</th>
+                        <th className="p-2.5">CO & FED</th>
+                        <th className="p-2.5">Tenibilidade</th>
+                        <th className="p-2.5 text-right">Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/80 text-slate-300">
+                      {cfdSolver.probes.map((probe) => {
+                        const isSelected = selectedProbeId === probe.id;
+                        const worldX = Math.round((probe.gridX - 18) * 10) / 10;
+                        const worldZ = Math.round((probe.gridY - 10) * 10) / 10;
+
+                        return (
+                          <tr
+                            key={probe.id}
+                            className={`transition ${
+                              isSelected
+                                ? 'bg-indigo-950/40 text-white font-semibold'
+                                : 'hover:bg-slate-900/60'
+                            }`}
+                          >
+                            <td className="p-2.5">
+                              <div className="font-bold text-slate-100">{probe.name}</div>
+                              <div className="text-[10px] text-slate-400">{probe.locationLabel}</div>
+                            </td>
+                            <td className="p-2.5 font-mono text-[11px] text-slate-400">
+                              {worldX >= 0 ? '+' : ''}{worldX}m, {worldZ >= 0 ? '+' : ''}{worldZ}m
+                            </td>
+                            <td className="p-2.5 font-mono text-slate-300">
+                              {probe.heightM || 1.8} m
+                            </td>
+                            <td className="p-2.5 font-mono">
+                              <span
+                                className={`font-bold ${
+                                  probe.tempC >= 60
+                                    ? 'text-rose-400 font-black'
+                                    : probe.tempC >= 38
+                                    ? 'text-amber-400'
+                                    : 'text-emerald-400'
+                                }`}
+                              >
+                                {probe.tempC} °C
+                              </span>
+                            </td>
+                            <td className="p-2.5 font-mono text-cyan-300 font-bold">
+                              {probe.visibilityM} m
+                            </td>
+                            <td className="p-2.5 font-mono text-[11px]">
+                              <span className="text-amber-300">{probe.coPpm} ppm</span> / <span className="text-purple-300">FED {probe.fedToxicity}</span>
+                            </td>
+                            <td className="p-2.5">
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                  probe.tenabilityStatus === 'tenivel'
+                                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                    : probe.tenabilityStatus === 'alerta_moderado'
+                                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                                    : 'bg-rose-500/20 text-rose-400 border border-rose-500/30 animate-pulse'
+                                }`}
+                              >
+                                {probe.tenabilityStatus === 'tenivel'
+                                  ? 'Tenível'
+                                  : probe.tenabilityStatus === 'alerta_moderado'
+                                  ? 'Alerta'
+                                  : 'Inabitável'}
+                              </span>
+                            </td>
+                            <td className="p-2.5 text-right">
+                              <button
+                                onClick={() => setSelectedProbeId(probe.id)}
+                                className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 font-semibold text-[11px] border border-slate-700 transition"
+                              >
+                                Inspecionar
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}

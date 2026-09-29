@@ -55,6 +55,9 @@ import { ScenarioEngineModal } from './components/ScenarioEngineModal';
 import { HospitalProtectionConfigModal } from './components/HospitalProtectionConfigModal';
 import { ReferenceBenchmarksModal } from './components/ReferenceBenchmarksModal';
 import { FDSIntegrationModal } from './components/FDSIntegrationModal';
+import { CommercialPricingModal } from './components/CommercialPricingModal';
+import { SystemManualModal } from './components/SystemManualModal';
+import { HospitalGeolocationModal } from './components/HospitalGeolocationModal';
 
 import {
   Play,
@@ -95,6 +98,10 @@ export default function App() {
   const [isHospitalProtectionModalOpen, setIsHospitalProtectionModalOpen] = useState(false);
   const [isReferenceBenchmarksModalOpen, setIsReferenceBenchmarksModalOpen] = useState(false);
   const [isFDSModalOpen, setIsFDSModalOpen] = useState(false);
+  const [isCommercialPricingModalOpen, setIsCommercialPricingModalOpen] = useState(false);
+  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
+  const [manualInitialPage, setManualInitialPage] = useState(1);
+  const [isGeolocationModalOpen, setIsGeolocationModalOpen] = useState(false);
 
   // CFD Fire Dynamics Simulator State (Authoritative physical engine)
   const [cfdState, setCfdState] = useState<CFDSimulationState>(cfdSolver.getState());
@@ -121,6 +128,16 @@ export default function App() {
   const [fireSpreadLevel, setFireSpreadLevel] = useState<number>(0.35);
   const [smokeSpreadLevel, setSmokeSpreadLevel] = useState<number>(0.25);
   const [isNorthStairBlocked, setIsNorthStairBlocked] = useState<boolean>(false);
+
+  // Subscribe to Dedicated Web Worker CFD updates for parallel off-thread execution
+  useEffect(() => {
+    const unsubscribe = cfdSolver.subscribe((state) => {
+      setCfdState(state);
+      setFireSpreadLevel(cfdSolver.getPhysicalFireSpread());
+      setSmokeSpreadLevel(cfdSolver.getPhysicalSmokeSpread());
+    });
+    return unsubscribe;
+  }, []);
 
   // Decision & Audit Records
   const [currentEventIndex, setCurrentEventIndex] = useState<number>(0);
@@ -689,6 +706,8 @@ export default function App() {
         onEndSimulation={handleCompleteSimulation}
         onTriggerSync={() => syncService.triggerSync()}
         onChangeMode={setMode}
+        onOpenManualModal={() => setIsManualModalOpen(true)}
+        onOpenGeolocationModal={() => setIsGeolocationModalOpen(true)}
         onGenerateManualPDF={handleGenerateManualPDF}
         onGenerateReportPDF={handleGenerateReportPDF}
       />
@@ -701,6 +720,7 @@ export default function App() {
           onSelectTab={(tab) => {
             setActiveTab(tab);
             if (tab === 'motor_cenarios') setIsScenarioEngineModalOpen(true);
+            if (tab === 'geolocalizacao_bombeiros') setIsGeolocationModalOpen(true);
             if (tab === 'fds_integration') setIsFDSModalOpen(true);
             if (tab === 'protecao_incendio' || tab === 'hospital' || tab === 'pavimentos' || tab === 'edificacao' || tab === 'ambientes') {
               setIsHospitalProtectionModalOpen(true);
@@ -711,6 +731,8 @@ export default function App() {
             if (tab === 'avaliacao') setIsEvaluationModalOpen(true);
             if (tab === 'relatorios') handleGenerateReportPDF();
             if (tab === 'referencias_benchmarks') setIsReferenceBenchmarksModalOpen(true);
+            if (tab === 'proposta_comercial') setIsCommercialPricingModalOpen(true);
+            if (tab === 'manual_sistema') setIsManualModalOpen(true);
           }}
           patientsCount={patients.length}
           criticalEventsCount={activeScenario.events.length}
@@ -738,6 +760,9 @@ export default function App() {
                 isNorthStairBlocked={isNorthStairBlocked}
                 selectedRoomId={selectedRoom?.id}
                 onOpenReferences={() => setIsReferenceBenchmarksModalOpen(true)}
+                onOpenPricingModal={() => setIsCommercialPricingModalOpen(true)}
+                onOpenManualModal={() => setIsManualModalOpen(true)}
+                onOpenGeolocationModal={() => setIsGeolocationModalOpen(true)}
                 cfdState={cfdState}
                 onOpenFDSModal={() => setIsFDSModalOpen(true)}
               />
@@ -925,6 +950,20 @@ export default function App() {
           setFireSpreadLevel(cfdSolver.getPhysicalFireSpread());
           setSmokeSpreadLevel(cfdSolver.getPhysicalSmokeSpread());
         }}
+      />
+
+      {/* Commercial Proposal & Pricing (Mercado Brasileiro) Modal */}
+      <CommercialPricingModal
+        isOpen={isCommercialPricingModalOpen}
+        onClose={() => setIsCommercialPricingModalOpen(false)}
+      />
+
+      {/* Official System Manual (50 Pages with Schematics, Diagrams & Print) */}
+      <SystemManualModal
+        isOpen={isManualModalOpen}
+        onClose={() => setIsManualModalOpen(false)}
+        initialPage={manualInitialPage}
+        onExportPDF={handleGenerateManualPDF}
       />
     </div>
   );

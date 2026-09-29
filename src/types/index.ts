@@ -331,6 +331,7 @@ export interface CFDProbeSensor {
   locationLabel: string;
   gridX: number;
   gridY: number;
+  heightM?: number;
   tempC: number;
   visibilityM: number;
   coPpm: number;

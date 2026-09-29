@@ -24,14 +24,18 @@ import {
   Wand2,
   ShieldCheck,
   Compass,
-  Database
+  Database,
+  DollarSign,
+  BookOpen,
+  MapPin
 } from 'lucide-react';
 
 export type ActiveSidebarTab =
   | 'dashboard'
   | 'simulacao'
-  | 'motor_cenarios'
+  | 'geolocalizacao_bombeiros'
   | 'fds_integration'
+  | 'motor_cenarios'
   | 'protecao_incendio'
   | 'hospital'
   | 'edificacao'
@@ -46,6 +50,8 @@ export type ActiveSidebarTab =
   | 'avaliacao'
   | 'relatorios'
   | 'referencias_benchmarks'
+  | 'proposta_comercial'
+  | 'manual_sistema'
   | 'configuracoes';
 
 interface NavigationSidebarProps {
@@ -66,6 +72,7 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
   const navItems: { id: ActiveSidebarTab; label: string; icon: React.ReactNode; badge?: string | number; badgeColor?: string }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
     { id: 'simulacao', label: 'Simulação 3D & CFD', icon: <Flame className="w-4 h-4 text-rose-500 animate-pulse" />, badge: 'Ao Vivo', badgeColor: 'bg-rose-900 text-rose-300' },
+    { id: 'geolocalizacao_bombeiros', label: 'Geolocalização Bombeiros', icon: <MapPin className="w-4 h-4 text-rose-400" />, badge: 'Maps 193', badgeColor: 'bg-rose-950 text-rose-300' },
     { id: 'fds_integration', label: 'Integração FDS v6.8', icon: <Database className="w-4 h-4 text-amber-400" />, badge: 'FDS Real', badgeColor: 'bg-amber-950 text-amber-300' },
     { id: 'motor_cenarios', label: 'Motor de Cenários', icon: <Wand2 className="w-4 h-4 text-indigo-400" />, badge: 'Novo', badgeColor: 'bg-indigo-900 text-indigo-300' },
     { id: 'protecao_incendio', label: '15 Sistemas Proteção', icon: <ShieldCheck className="w-4 h-4 text-rose-400" />, badge: '15/15', badgeColor: 'bg-rose-950 text-rose-300' },
@@ -80,6 +87,8 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
     { id: 'cenarios', label: 'Catálogo Cenários', icon: <Sparkles className="w-4 h-4 text-amber-400" />, badge: '20+' },
     { id: 'eventos', label: 'Eventos Timeline', icon: <ListOrdered className="w-4 h-4" />, badge: criticalEventsCount, badgeColor: 'bg-amber-950 text-amber-300' },
     { id: 'referencias_benchmarks', label: 'Pathfinder & FDS', icon: <Compass className="w-4 h-4 text-emerald-400" />, badge: 'Ref' },
+    { id: 'proposta_comercial', label: 'Valores & Venda BR', icon: <DollarSign className="w-4 h-4 text-emerald-400" />, badge: 'R$ Brasil', badgeColor: 'bg-emerald-950 text-emerald-300' },
+    { id: 'manual_sistema', label: 'Manual Completo', icon: <BookOpen className="w-4 h-4 text-indigo-400" />, badge: '50 Pág', badgeColor: 'bg-indigo-950 text-indigo-300' },
     { id: 'avaliacao', label: 'Avaliação & Radar', icon: <Award className="w-4 h-4 text-emerald-400" /> },
     { id: 'relatorios', label: 'Relatórios PDF', icon: <FileText className="w-4 h-4" /> },
     { id: 'configuracoes', label: 'Configurações', icon: <Settings className="w-4 h-4" /> },
