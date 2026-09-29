@@ -154,6 +154,15 @@ export default function App() {
   useEffect(() => {
     async function initDB() {
       await dbService.initializeWithSeedData();
+      const localHospital = await dbService.getAll<Hospital>('hospitals');
+      if (localHospital.length > 0) setHospital(localHospital[0]);
+
+      const localFloors = await dbService.getAll<Floor>('floors');
+      if (localFloors.length > 0) setFloors(localFloors);
+
+      const localRooms = await dbService.getAll<Room>('rooms');
+      if (localRooms.length > 0) setRooms(localRooms);
+
       const localPatients = await dbService.getAll<Patient>('patients');
       if (localPatients.length > 0) setPatients(localPatients);
 
@@ -558,6 +567,20 @@ export default function App() {
       setPatients(newPatientsList);
     }
 
+    // Synchronize 3D Viewer to the active scenario floor and room fire status
+    setSelectedFloorId(formConfig.floorId);
+    setRooms((prev) =>
+      prev.map((r) => {
+        const isOrigin = r.floorId === formConfig.floorId && (r.roomNumber === formConfig.originRoomNumber || r.id === formConfig.originRoomNumber);
+        const isSameFloor = r.floorId === formConfig.floorId;
+        return {
+          ...r,
+          fireStatus: isOrigin ? 'em_chamas' : isSameFloor ? 'alerta_fumaca' : 'seguro',
+          temperatureC: isOrigin ? 680 : isSameFloor ? 75 : 22
+        };
+      })
+    );
+
     setSimulationStatus('em_andamento');
     setActiveTab('simulacao');
 
@@ -860,10 +883,13 @@ export default function App() {
         hospital={hospital}
         floors={floors}
         rooms={rooms}
-        onSaveHospital={(updatedHosp, updatedFloors) => {
+        onSaveHospital={async (updatedHosp, updatedFloors) => {
           setHospital(updatedHosp);
           setFloors(updatedFloors);
-          dbService.put('hospitals', updatedHosp);
+          await dbService.put('hospitals', updatedHosp);
+          for (const fl of updatedFloors) {
+            await dbService.put('floors', fl);
+          }
         }}
       />
 
