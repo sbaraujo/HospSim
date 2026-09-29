@@ -70,6 +70,25 @@ export function ReferenceBenchmarksModal({ isOpen, onClose }: ReferenceBenchmark
         { label: 'Alimentação por Gerador', value: 'Grupo Gerador 500 kVA' }
       ],
       findings: 'A permanência assistida na Área de Refúgio reduz a mortalidade em 92% para pacientes de UTI e suporte de vida em comparação com a descida forçada por escadas.'
+    },
+    {
+      id: 'bm-04',
+      title: 'Engenharia de Evacuação Hospitalar: Perfis, Fatores de Redução & Pré-Movimento',
+      software: 'Geoerg et al. (2025) / Hunt et al. / Kwak (2021) / SFPE & NIST',
+      category: 'Parâmetros Empíricos & Física de Egress',
+      description: 'Diretrizes científicas de movimentação e tempos de preparação em hospitais. Baseado em exercícios reais (drills) na Nova Zelândia (Geoerg 2025), experimentos em Ghent com dispositivos assistivos (Hunt & Galea 2013/2016), dinâmica de leitos (Kwak 2021) e revisões de populações vulneráveis do SFPE Handbook e Kuligowski (NIST).',
+      metrics: [
+        { label: 'Ambulatory / Comum', value: '1.0–1.2 m/s (horiz) | 0.55–0.75 m/s (escadas)' },
+        { label: 'Cadeira de Rodas', value: '1.1–1.2 m/s (horiz) | transferir p/ escadas' },
+        { label: 'Cadeira de Evacuação (Evac-chair)', value: '1.4–1.5 m/s (horiz) | 0.80–0.85 m/s (escadas)' },
+        { label: 'Leito Hospitalar (Bed)', value: '0.6–0.8 m/s (reta) | NÃO usar em escadas' },
+        { label: 'Fator Congestionamento', value: '×0.6 a ×0.8 da velocidade base' },
+        { label: 'Curvas 90° & Portas', value: '-10% a -30% (maior perda em leitos)' },
+        { label: 'Fadiga por Distância', value: '-4% a cada 100m percorridos (camas)' },
+        { label: 'Pré-Movimento Walking/Wheelchair', value: '~128–140 s (ativa + passiva)' },
+        { label: 'Pré-Movimento Leitos UTI', value: '~194 s (podendo atingir 300–500+ s)' }
+      ],
+      findings: 'O pré-movimento domina o tempo total de egress hospitalar. Leitos NÃO devem ser conduzidos para caixas de escada; a evacuação horizontal assistida até a Área de Refúgio é a estratégia obrigatória para pacientes de UTI e alta dependência.'
     }
   ];
 
@@ -104,7 +123,7 @@ export function ReferenceBenchmarksModal({ isOpen, onClose }: ReferenceBenchmark
         {/* Content */}
         <div className="p-6 overflow-y-auto flex-1 space-y-6 text-slate-200">
           {/* Benchmark selection tabs */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
             {benchmarks.map((bm, idx) => (
               <button
                 key={bm.id}

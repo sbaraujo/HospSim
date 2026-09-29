@@ -227,6 +227,12 @@ export const ThreeHospitalViewer: React.FC<ThreeHospitalViewerProps> = ({
   const cameraAngleRef = useRef({ theta: Math.PI / 4, phi: Math.PI / 4, radius: 45 });
   const cameraTargetRef = useRef(new THREE.Vector3(0, 10, 0));
 
+  // Frustum Culling & High-Performance Instancing Refs
+  const frustumRef = useRef(new THREE.Frustum());
+  const projScreenMatrixRef = useRef(new THREE.Matrix4());
+  const tempSphereRef = useRef(new THREE.Sphere(new THREE.Vector3(), 2.8));
+  const tempMatrixRef = useRef(new THREE.Matrix4());
+
   // Animated objects references
   const fireTonguesRef = useRef<THREE.Mesh[]>([]);
   const flameCoreRef = useRef<THREE.Mesh | null>(null);
@@ -338,10 +344,22 @@ export const ThreeHospitalViewer: React.FC<ThreeHospitalViewerProps> = ({
       animationFrameRef.current = requestAnimationFrame(animate);
       const elapsedTime = clock.getElapsedTime();
 
-      // Update LODs based on camera distance
+      // Frustum Culling & Dynamic LOD Camera Update (60 FPS Performance Optimization)
       if (cameraRef.current && lodListRef.current.length > 0) {
+        projScreenMatrixRef.current.multiplyMatrices(
+          cameraRef.current.projectionMatrix,
+          cameraRef.current.matrixWorldInverse
+        );
+        frustumRef.current.setFromProjectionMatrix(projScreenMatrixRef.current);
+
         for (let i = 0; i < lodListRef.current.length; i++) {
-          lodListRef.current[i].update(cameraRef.current);
+          const lod = lodListRef.current[i];
+          tempSphereRef.current.center.copy(lod.position);
+          const inFrustum = frustumRef.current.intersectsSphere(tempSphereRef.current);
+          lod.visible = inFrustum;
+          if (inFrustum) {
+            lod.update(cameraRef.current);
+          }
         }
       }
 
