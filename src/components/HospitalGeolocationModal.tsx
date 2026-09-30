@@ -35,6 +35,7 @@ import {
   KNOWN_HOSPITAL_PRESETS,
   MapGroundingLink
 } from '../services/mapsGeolocationService';
+import { GeoreferencedHospitalMap } from './GeoreferencedHospitalMap';
 
 interface HospitalGeolocationModalProps {
   isOpen: boolean;
@@ -54,7 +55,7 @@ export const HospitalGeolocationModal: React.FC<HospitalGeolocationModalProps> =
   const [result, setResult] = useState<GeolocationResult | null>(null);
   const [geoError, setGeoError] = useState<string | null>(null);
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'stations' | 'report'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'georeferenced_map' | 'stations' | 'report'>('georeferenced_map');
 
   useEffect(() => {
     if (isOpen && !result && address) {
@@ -223,6 +224,20 @@ export const HospitalGeolocationModal: React.FC<HospitalGeolocationModalProps> =
         {/* Navigation Tabs */}
         <div className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 border-b border-slate-800 text-xs">
           <button
+            onClick={() => setActiveTab('georeferenced_map')}
+            className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition ${
+              activeTab === 'georeferenced_map'
+                ? 'bg-cyan-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Crosshair className="w-3.5 h-3.5 text-cyan-300" />
+            Mapa Georreferenciado & Rotas
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-cyan-500/20 text-cyan-300 font-mono">
+              WGS-84
+            </span>
+          </button>
+          <button
             onClick={() => setActiveTab('overview')}
             className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition ${
               activeTab === 'overview'
@@ -290,6 +305,16 @@ export const HospitalGeolocationModal: React.FC<HospitalGeolocationModalProps> =
 
           {!loading && result && (
             <>
+              {/* TAB 0: INTERACTIVE GEOREFERENCED TACTICAL MAP */}
+              {activeTab === 'georeferenced_map' && (
+                <GeoreferencedHospitalMap
+                  hospitalName={hospitalName}
+                  address={result.queriedAddress}
+                  coordinates={result.detectedCoordinates || { lat: -23.55052, lng: -46.63331 }}
+                  fireStations={result.mapLinks}
+                />
+              )}
+
               {/* TAB 1: OVERVIEW & COORDINATES */}
               {activeTab === 'overview' && (
                 <div className="space-y-4">

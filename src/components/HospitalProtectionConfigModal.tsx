@@ -24,7 +24,8 @@ import {
   Sliders,
   Info,
   SlidersHorizontal,
-  Check
+  Check,
+  MapPin
 } from 'lucide-react';
 
 interface HospitalProtectionConfigModalProps {
@@ -34,6 +35,7 @@ interface HospitalProtectionConfigModalProps {
   floors: Floor[];
   rooms: Room[];
   onSaveHospital: (updatedHospital: Hospital, updatedFloors: Floor[]) => void;
+  onOpenGeolocation?: () => void;
 }
 
 export function HospitalProtectionConfigModal({
@@ -42,7 +44,8 @@ export function HospitalProtectionConfigModal({
   hospital,
   floors,
   rooms,
-  onSaveHospital
+  onSaveHospital,
+  onOpenGeolocation
 }: HospitalProtectionConfigModalProps) {
   const [activeTab, setActiveTab] = useState<'checklist' | 'hospital' | 'pavimentos'>('checklist');
 
@@ -310,12 +313,25 @@ export function HospitalProtectionConfigModal({
 
                   <div>
                     <label className="block text-slate-400 mb-1 font-bold">Endereço Completo</label>
-                    <input
-                      type="text"
-                      value={localHospital.address}
-                      onChange={(e) => setLocalHospital({ ...localHospital, address: e.target.value })}
-                      className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white"
-                    />
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={localHospital.address}
+                        onChange={(e) => setLocalHospital({ ...localHospital, address: e.target.value })}
+                        className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white"
+                      />
+                      {onOpenGeolocation && (
+                        <button
+                          type="button"
+                          onClick={onOpenGeolocation}
+                          className="px-3 py-2 rounded bg-rose-600/30 hover:bg-rose-600/50 text-rose-300 border border-rose-500/40 text-xs font-bold flex items-center gap-1.5 shrink-0 transition"
+                          title="Abrir Mapa Georreferenciado e Quartéis de Bombeiros"
+                        >
+                          <MapPin className="w-3.5 h-3.5 text-rose-400" />
+                          <span>Ver no Mapa & 193</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">

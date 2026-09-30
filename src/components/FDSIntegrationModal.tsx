@@ -20,6 +20,7 @@ import {
 } from '../types';
 import { cfdSolver } from '../services/cfdEngine';
 import { interpolateSeries } from '../services/fdsDatasets';
+import { RechartsFDSAnalyticsPanel } from './RechartsFDSAnalyticsPanel';
 import {
   Flame,
   Upload,
@@ -62,7 +63,7 @@ interface FDSIntegrationModalProps {
   onDatasetChanged: (dataset: FDSDataset) => void;
 }
 
-type ModalTab = 'stratification' | 'channels' | 'datasets' | 'probe_placement';
+type ModalTab = 'stratification' | 'recharts_analytics' | 'channels' | 'datasets' | 'probe_placement';
 type LocationRakeGroup = 'origin_room_408' | 'corridor_center' | 'all';
 
 export const FDSIntegrationModal: React.FC<FDSIntegrationModalProps> = ({
@@ -265,6 +266,20 @@ export const FDSIntegrationModal: React.FC<FDSIntegrationModalProps> = ({
         <div className="bg-slate-950 px-6 py-2 border-b border-slate-800 flex items-center justify-between text-xs">
           <div className="flex items-center gap-2">
             <button
+              onClick={() => setActiveTab('recharts_analytics')}
+              className={`px-3.5 py-1.5 rounded-md font-medium flex items-center gap-2 transition ${
+                activeTab === 'recharts_analytics'
+                  ? 'bg-indigo-600/40 text-indigo-300 border border-indigo-500/50 shadow-xs font-bold'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Activity className="w-3.5 h-3.5 text-cyan-400" />
+              Gráficos Recharts (Temp & CO)
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30">
+                FDS Real
+              </span>
+            </button>
+            <button
               onClick={() => setActiveTab('stratification')}
               className={`px-3.5 py-1.5 rounded-md font-medium flex items-center gap-2 transition ${
                 activeTab === 'stratification'
@@ -327,6 +342,11 @@ export const FDSIntegrationModal: React.FC<FDSIntegrationModalProps> = ({
 
         {/* Modal Body */}
         <div className="p-5 overflow-y-auto flex-1 space-y-4 text-slate-200 text-xs">
+          {/* TAB 0: RECHARTS HIGH-FIDELITY ANALYTICS (TEMP & CO MONITORS) */}
+          {activeTab === 'recharts_analytics' && (
+            <RechartsFDSAnalyticsPanel cfdState={cfdState} currentTime={currentTime} />
+          )}
+
           {/* TAB 1: ESTRATIFICAÇÃO TÉRMICA & MULTI-PROBE EVOLUTION */}
           {activeTab === 'stratification' && (
             <div className="space-y-4">

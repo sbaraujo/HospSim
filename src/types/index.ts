@@ -422,6 +422,16 @@ export interface CFDSimulationState {
   sprinklersTrippedCount: number;
   fireDoorsSealedCount: number;
   probes: CFDProbeSensor[];
+  threadPoolMetrics?: {
+    activeThreads: number;
+    totalHardwareCores: number;
+    subWorkerTasksExecuted: number;
+    domainPartitionsCount: number;
+    averageLatencyMs: number;
+    uiFpsGauge: number;
+    isMultiThreaded: boolean;
+    partitionLabels: string[];
+  };
 }
 
 // ==========================================

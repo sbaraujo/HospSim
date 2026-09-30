@@ -31,6 +31,8 @@ import {
   interpolateSeries
 } from './fdsDatasets';
 
+import { cfdThreadPool } from './cfdThreadPool';
+
 import {
   CFDSolverOptions,
   CFDWorkerInboundMessage,
@@ -889,6 +891,27 @@ export class CFDEngine {
       probe.historyVisibilities.push(probe.visibilityM);
       if (probe.historyVisibilities.length > 25) probe.historyVisibilities.shift();
     });
+
+    // Parallel Sub-Worker Task Partitioning (keeps UI thread at steady 60+ FPS)
+    cfdThreadPool.executeDomainDecomposition(this.grid, {
+      elapsedSec: t,
+      currentHRRKw: this.currentHRRKw,
+      peakTempC: this.peakTempC,
+      corridorTempC: this.corridorTempC,
+      corridorVisibilityM: this.corridorVisibilityM,
+      corridorSmokeOpticalDensity: this.corridorSmokeOpticalDensity,
+      corridorCoPpm: this.corridorCoPpm,
+      corridorFedToxicity: this.corridorFedToxicity,
+      ceilingHeight: this.ceilingHeight,
+      sprinklersActive: this.sprinklersSuppression,
+      smokeExtractionActive: this.smokeExtractionActive,
+      stairPressurizationActive: this.stairPressurizationActive,
+      isStairADoorOpen: this.isStairADoorOpen,
+      isFireDoorClosed: this.isFireDoorClosed,
+      probes: this.probes
+    }).catch(err => {
+      console.warn('[CFDEngine] Thread pool execution notice:', err);
+    });
   }
 
   private updateFromHeuristic(t: number) {
@@ -1022,7 +1045,8 @@ export class CFDEngine {
       stairPressurizationActive: this.stairPressurizationActive,
       sprinklersTrippedCount: this.sprinklersSuppression ? 6 : 0,
       fireDoorsSealedCount: this.isFireDoorClosed ? 3 : 0,
-      probes: this.probes
+      probes: this.probes,
+      threadPoolMetrics: cfdThreadPool.getMetrics()
     };
   }
 }

@@ -916,6 +916,7 @@ export default function App() {
             await dbService.put('floors', fl);
           }
         }}
+        onOpenGeolocation={() => setIsGeolocationModalOpen(true)}
       />
 
       {/* Reference Benchmarks (Pathfinder & FDS) Modal */}
@@ -964,6 +965,14 @@ export default function App() {
         onClose={() => setIsManualModalOpen(false)}
         initialPage={manualInitialPage}
         onExportPDF={handleGenerateManualPDF}
+      />
+
+      {/* Hospital Geolocation & Nearest Fire Stations (Google Maps Grounding & Georeferenced Map) */}
+      <HospitalGeolocationModal
+        isOpen={isGeolocationModalOpen}
+        onClose={() => setIsGeolocationModalOpen(false)}
+        defaultAddress={hospital.address + ', ' + hospital.city + ' - ' + hospital.state}
+        hospitalName={hospital.name}
       />
     </div>
   );
