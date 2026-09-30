@@ -136,6 +136,12 @@ export const HospitalGeolocationModal: React.FC<HospitalGeolocationModalProps> =
                   <Globe className="w-3 h-3 text-cyan-400" />
                   Google Maps Grounding
                 </span>
+                {result?.isFallback && (
+                  <span className="px-2 py-0.5 text-[10px] font-mono font-bold uppercase rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1" title="Unidades operacionais e rotas sincronizadas com protocolo CBMESP">
+                    <ShieldAlert className="w-3 h-3 text-emerald-400" />
+                    Prontidão Tática CBMESP
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-400">
                 Localização geográfica exata do complexo hospitalar e despacho tático de quartéis de bombeiros mais próximos

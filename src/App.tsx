@@ -841,6 +841,9 @@ export default function App() {
           fireSpreadLevel={fireSpreadLevel}
           smokeSpreadLevel={smokeSpreadLevel}
           cfdState={cfdState}
+          selectedFloorId={selectedFloorId}
+          floors={floors}
+          onSelectFloor={(floorId) => setSelectedFloorId(floorId)}
           onOpenFDSModal={() => setIsFDSModalOpen(true)}
           onSelectPatient={(p) => {
             setSelectedPatient(p);

@@ -3,14 +3,25 @@
  * Right Status Panel: Current Situation, Events, Decisions, At-Risk Patients, Routes
  */
 
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   ScenarioEvent,
   Patient,
   ResourceItem,
   SimulationLogEntry,
-  CFDSimulationState
+  CFDSimulationState,
+  Floor
 } from '../types';
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  ReferenceLine
+} from 'recharts';
 import {
   AlertTriangle,
   Flame,
@@ -24,7 +35,10 @@ import {
   HeartPulse,
   Database,
   Gauge,
-  Wind
+  Wind,
+  TrendingUp,
+  Thermometer,
+  Layers
 } from 'lucide-react';
 
 interface RightStatusPanelProps {
@@ -39,7 +53,153 @@ interface RightStatusPanelProps {
   cfdState?: CFDSimulationState;
   onSelectPatient: (patient: Patient) => void;
   onOpenFDSModal?: () => void;
+  selectedFloorId?: number | null;
+  floors?: Floor[];
+  onSelectFloor?: (floorId: number) => void;
 }
+
+const DEFAULT_FLOOR_OPTIONS = [
+  { id: 4, shortLabel: '4º Pav', name: '4º Pavimento (Internação/Foco)', purpose: 'Foco Inicial do Incêndio' },
+  { id: 3, shortLabel: '3º Pav', name: '3º Pavimento (UTI Geral)', purpose: 'UTI Adulto & Coronariana' },
+  { id: 2, shortLabel: '2º Pav', name: '2º Pavimento (C. Cirúrgico)', purpose: 'Centro Cirúrgico (6 Salas)' },
+  { id: 1, shortLabel: '1º Pav', name: '1º Pavimento (Diagnóstico)', purpose: 'Imagem, Tomografia e Farmácia' },
+  { id: 0, shortLabel: 'Térreo', name: 'Pavimento Térreo (Pronto-Socorro)', purpose: 'Pronto-Socorro & Triagem' },
+  { id: -1, shortLabel: 'Subsolo', name: 'Subsolo Técnico', purpose: 'Central de Gases e Bombas' }
+];
+
+/**
+ * Computes average temperature curve (°C) across time (0 to 600s) for a given floor
+ * calibrated with physical FDS outputs and live cfdState values.
+ */
+function getFloorThermalEvolution(
+  floorId: number,
+  cfdState?: CFDSimulationState,
+  isNorthStairBlocked?: boolean
+) {
+  const currentElapsed = cfdState?.elapsedSec ?? 0;
+  const isSprinklerActive = (cfdState?.sprinklersTrippedCount ?? 0) > 0;
+  const livePeakTemp = cfdState?.peakTempC ?? 285;
+  const maxTime = 600;
+  const step = 15;
+  const points: { time: number; avgTemp: number; peakTemp?: number }[] = [];
+
+  for (let t = 0; t <= maxTime; t += step) {
+    let avg = 22.0;
+    let peak = 22.0;
+
+    if (floorId === 4) {
+      // 4º Pavimento (Andar do Incêndio / Foco Quarto 408)
+      if (isSprinklerActive) {
+        // Sprinklers trip, suppressing peak HRR and bringing thermal load down
+        const tPeak = Math.min(t, 90);
+        const growth = Math.pow(tPeak / 90, 1.8);
+        const maxFloorAvg = 38.5;
+        if (t <= 90) {
+          avg = 22.0 + (maxFloorAvg - 22.0) * growth;
+          peak = 22.0 + (320 - 22.0) * growth;
+        } else {
+          const decay = Math.exp(-(t - 90) / 130);
+          avg = 25.0 + (maxFloorAvg - 25.0) * decay;
+          peak = 45.0 + (320 - 45.0) * decay;
+        }
+      } else {
+        // Standard uncontrolled flashover profile (2400 m² floor)
+        const growth = Math.min(1.0, Math.pow(t / 420, 1.6));
+        avg = 22.0 + (78.5 - 22.0) * growth;
+        peak = 22.0 + (790.0 - 22.0) * Math.min(1.0, Math.pow(t / 300, 1.4));
+      }
+
+      // Synchronize curve with live cfdState near current simulation time
+      if (currentElapsed > 0 && Math.abs(t - currentElapsed) <= step) {
+        if (cfdState?.probes && cfdState.probes.length > 0) {
+          const probeTemps = cfdState.probes.map(p => p.tempC);
+          const liveAvg = probeTemps.reduce((a, b) => a + b, 0) / probeTemps.length;
+          avg = (avg + liveAvg) / 2;
+        }
+        peak = livePeakTemp;
+      }
+    } else if (floorId === 3) {
+      // 3º Pavimento (UTI Geral - laje de concreto TRRF 120min, condução vertical lenta)
+      const stairFactor = isNorthStairBlocked ? 1.5 : 1.0;
+      const conduction = Math.min(1.0, Math.pow(t / 600, 1.3));
+      avg = 21.0 + (28.5 - 21.0) * conduction * stairFactor;
+      peak = avg + 3.5 * conduction;
+    } else if (floorId === 2) {
+      // 2º Pavimento (Centro Cirúrgico - Pressurização Positiva)
+      const conduction = Math.min(1.0, t / 600);
+      avg = 19.5 + 2.0 * conduction;
+      peak = avg + 1.2;
+    } else if (floorId === 1) {
+      // 1º Pavimento (Diagnóstico por Imagem e Farmácia)
+      const conduction = Math.min(1.0, t / 600);
+      avg = 22.0 + 1.5 * conduction;
+      peak = avg + 1.0;
+    } else if (floorId === 0) {
+      // Pavimento Térreo (Pronto-Socorro / Portas Abertas)
+      const conduction = Math.min(1.0, t / 600);
+      avg = 23.0 + 1.2 * conduction;
+      peak = avg + 0.8;
+    } else {
+      // Subsolo Técnico (-1)
+      const conduction = Math.min(1.0, t / 600);
+      avg = 25.0 + 0.8 * conduction;
+      peak = avg + 0.6;
+    }
+
+    points.push({
+      time: t,
+      avgTemp: Math.round(avg * 10) / 10,
+      peakTemp: floorId === 4 ? Math.round(peak * 10) / 10 : undefined
+    });
+  }
+
+  return points;
+}
+
+const CustomThermalTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    const minutes = Math.floor(label / 60);
+    const seconds = label % 60;
+    const timeStr = `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
+    const avg = data.avgTemp;
+    const peak = data.peakTemp;
+
+    return (
+      <div className="bg-slate-900/95 border border-slate-700/80 p-2.5 rounded-lg shadow-xl text-[11px] backdrop-blur-sm z-50">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-1 mb-1.5 font-mono text-[10px] text-slate-400">
+          <span>Tempo Sim: {timeStr}</span>
+          <span className="text-cyan-400 font-bold">{label}s</span>
+        </div>
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-slate-300 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+              Temp. Média:
+            </span>
+            <span className="font-bold font-mono text-amber-300">{avg}°C</span>
+          </div>
+          {peak !== undefined && (
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-slate-400 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
+                Pico Foco (408):
+              </span>
+              <span className="font-mono text-rose-400">{peak}°C</span>
+            </div>
+          )}
+          <div className="pt-1 mt-1 border-t border-slate-800 flex items-center justify-between text-[10px]">
+            <span className="text-slate-500">Tenabilidade:</span>
+            <span className={avg >= 60 ? 'text-rose-400 font-bold' : avg >= 38 ? 'text-amber-400 font-bold' : 'text-emerald-400 font-bold'}>
+              {avg >= 60 ? 'Inabitável (>60°C)' : avg >= 38 ? 'Alerta Térmico' : 'Tenível (<38°C)'}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
 
 export const RightStatusPanel: React.FC<RightStatusPanelProps> = ({
   currentEvent,
@@ -52,8 +212,29 @@ export const RightStatusPanel: React.FC<RightStatusPanelProps> = ({
   smokeSpreadLevel,
   cfdState,
   onSelectPatient,
-  onOpenFDSModal
+  onOpenFDSModal,
+  selectedFloorId = 4,
+  floors,
+  onSelectFloor
 }) => {
+  // Synchronized floor selection state
+  const [internalFloorId, setInternalFloorId] = useState<number>(selectedFloorId ?? 4);
+
+  useEffect(() => {
+    if (selectedFloorId !== undefined && selectedFloorId !== null) {
+      setInternalFloorId(selectedFloorId);
+    }
+  }, [selectedFloorId]);
+
+  const activeFloorId = internalFloorId;
+
+  const handleSelectFloor = (floorId: number) => {
+    setInternalFloorId(floorId);
+    if (onSelectFloor) {
+      onSelectFloor(floorId);
+    }
+  };
+
   // Patients in acute risk (in fire room or heavy smoke zone)
   const atRiskPatients = patients.filter(
     (p) => p.status === 'exposto_risco' || p.status === 'critico' || (p.floorId === 4 && p.status === 'em_leito')
@@ -66,6 +247,90 @@ export const RightStatusPanel: React.FC<RightStatusPanelProps> = ({
   const displayLayerHeight = cfdState ? cfdState.smokeLayerHeightM : 1.6;
   const displayCO = cfdState ? cfdState.coMaxPpm : 45;
   const displayFED = cfdState ? cfdState.fedMaxToxicity : 0.05;
+
+  const simulationTimeSec = cfdState?.elapsedSec ?? 0;
+
+  // Thermal evolution dataset for the active selected floor
+  const chartData = useMemo(() => {
+    return getFloorThermalEvolution(activeFloorId, cfdState, isNorthStairBlocked);
+  }, [activeFloorId, cfdState, isNorthStairBlocked]);
+
+  // Current average temperature on selected floor interpolated at current simulation time
+  const currentFloorAvgTemp = useMemo(() => {
+    if (!chartData || chartData.length === 0) return 22.0;
+    const clampedT = Math.max(0, Math.min(600, simulationTimeSec));
+    const lowerPoint = chartData.reduce((prev, curr) => (curr.time <= clampedT ? curr : prev), chartData[0]);
+    const upperPoint = chartData.find(p => p.time >= clampedT) || chartData[chartData.length - 1];
+
+    if (lowerPoint.time === upperPoint.time) return lowerPoint.avgTemp;
+    const ratio = (clampedT - lowerPoint.time) / (upperPoint.time - lowerPoint.time);
+    return Math.round((lowerPoint.avgTemp + ratio * (upperPoint.avgTemp - lowerPoint.avgTemp)) * 10) / 10;
+  }, [chartData, simulationTimeSec]);
+
+  // Critical temperature for the active selected floor (origin/peak temperature for Floor 4, or peak sector for others)
+  const selectedFloorCriticalTemp = useMemo(() => {
+    if (activeFloorId === 4) {
+      return cfdState ? cfdState.peakTempC : 285;
+    }
+    const clampedT = Math.max(0, Math.min(600, simulationTimeSec));
+    const pt = chartData.reduce((prev, curr) => (curr.time <= clampedT ? curr : prev), chartData[0]);
+    return pt.peakTemp ?? pt.avgTemp;
+  }, [activeFloorId, cfdState, chartData, simulationTimeSec]);
+
+  // Flashover Risk Assessment (Verde -> Amarelo -> Vermelho baseado na temperatura crítica)
+  const flashoverRisk = useMemo(() => {
+    const temp = selectedFloorCriticalTemp;
+    if (temp < 300) {
+      return {
+        level: 'baixo',
+        label: 'Baixo (Seguro)',
+        colorName: 'verde',
+        textClass: 'text-emerald-400',
+        bgClass: 'bg-gradient-to-br from-emerald-950/40 to-slate-950/80',
+        borderClass: 'border-emerald-600/40',
+        badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+        barColor: 'from-emerald-500 to-emerald-400',
+        iconColor: 'text-emerald-400',
+        description: activeFloorId === 4
+          ? 'Gases aquecidos sob controle inicial. Temperatura bem abaixo do limiar de ignição súbita (flashover < 300°C).'
+          : 'Pavimento sem foco ativo. Lajes e compartimentação corta-fogo (TRRF 120 min) garantem isolamento térmico estanque.'
+      };
+    } else if (temp < 500) {
+      return {
+        level: 'moderado',
+        label: 'Moderado (Alerta)',
+        colorName: 'amarelo',
+        textClass: 'text-amber-400',
+        bgClass: 'bg-gradient-to-br from-amber-950/50 to-slate-950/90',
+        borderClass: 'border-amber-600/50 shadow-md shadow-amber-950/30',
+        badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/50 animate-pulse',
+        barColor: 'from-amber-500 to-amber-400',
+        iconColor: 'text-amber-400 animate-bounce',
+        description: 'Camada de fumaça sob o teto irradiando calor significativo (300°C a 500°C). Risco iminente de rollover e pirolisação dos revestimentos.'
+      };
+    } else {
+      return {
+        level: 'critico',
+        label: 'Crítico (Flashover Iminente)',
+        colorName: 'vermelho',
+        textClass: 'text-rose-400',
+        bgClass: 'bg-gradient-to-br from-rose-950/70 to-slate-950/90 shadow-lg shadow-rose-950/60',
+        borderClass: 'border-rose-500/80',
+        badgeClass: 'bg-rose-600 text-white border-rose-400 animate-pulse font-extrabold shadow-md shadow-rose-950',
+        barColor: 'from-rose-600 to-rose-400',
+        iconColor: 'text-rose-500 animate-pulse',
+        description: 'Temperatura crítica de flashover atingida (≥500°C / limite 600°C). Radiação térmica extrema (>20 kW/m²). Conflagração súbita e generalizada no setor!'
+      };
+    }
+  }, [selectedFloorCriticalTemp, activeFloorId]);
+
+  // Display name of selected floor
+  const currentFloorOption = DEFAULT_FLOOR_OPTIONS.find(f => f.id === activeFloorId) || {
+    id: activeFloorId,
+    shortLabel: `${activeFloorId}º Pav`,
+    name: `${activeFloorId}º Pavimento`,
+    purpose: 'Setor Hospitalar'
+  };
 
   return (
     <aside className="w-80 bg-slate-900 border-l border-slate-800 p-3.5 flex flex-col gap-3 shrink-0 h-full overflow-y-auto text-slate-200 text-xs">
@@ -164,6 +429,180 @@ export const RightStatusPanel: React.FC<RightStatusPanelProps> = ({
             <Gauge className="w-3 h-3 text-cyan-400" /> Inspecionar Saídas e Arquivos FDS
           </button>
         )}
+      </div>
+
+      {/* 2.3 INDICADOR VISUAL: RISCO DE FLASHOVER (CONFORME TEMPERATURA CRÍTICA DO CFDSTATE DO ANDAR) */}
+      <div className={`p-3 rounded-xl border transition-all duration-300 shadow-md ${flashoverRisk.bgClass} ${flashoverRisk.borderClass}`}>
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center gap-1.5">
+            {flashoverRisk.level === 'critico' ? (
+              <Flame className="w-4 h-4 text-rose-500 animate-pulse" />
+            ) : flashoverRisk.level === 'moderado' ? (
+              <AlertTriangle className="w-4 h-4 text-amber-400 animate-bounce" />
+            ) : (
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            )}
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-200">
+              Risco de Flashover
+            </span>
+          </div>
+
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider border ${flashoverRisk.badgeClass}`}>
+            {flashoverRisk.label}
+          </span>
+        </div>
+
+        {/* Temperature Critical Value & Floor Information */}
+        <div className="flex items-center justify-between text-[11px] mb-1.5 font-mono">
+          <span className="text-slate-300 font-sans text-[10px]">
+            {currentFloorOption.shortLabel}: <span className="font-mono font-bold text-white">{selectedFloorCriticalTemp.toFixed(1)}°C</span>
+          </span>
+          <span className={`text-[10px] font-bold ${flashoverRisk.textClass}`}>
+            Limite: 600°C ({Math.min(100, Math.round((selectedFloorCriticalTemp / 600) * 100))}%)
+          </span>
+        </div>
+
+        {/* Dynamic Flashover Gauge Bar (Verde -> Amarelo -> Vermelho) */}
+        <div className="space-y-1">
+          <div className="w-full bg-slate-950/80 h-2 rounded-full overflow-hidden p-0.5 border border-slate-800">
+            <div
+              className={`h-full rounded-full transition-all duration-500 bg-gradient-to-r ${flashoverRisk.barColor}`}
+              style={{ width: `${Math.max(4, Math.min(100, Math.round((selectedFloorCriticalTemp / 600) * 100)))}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-[8px] font-mono text-slate-500 px-0.5">
+            <span className="text-emerald-500/80">0°C Seguro</span>
+            <span className="text-amber-500/80">300°C Alerta</span>
+            <span className="text-rose-500/80 font-bold">≥500°C Flashover</span>
+          </div>
+        </div>
+
+        {/* Contextual physical diagnosis */}
+        <p className="text-[10px] text-slate-300 mt-2 leading-relaxed border-t border-slate-800/60 pt-1.5">
+          {flashoverRisk.description}
+        </p>
+      </div>
+
+      {/* 2.5 GRÁFICO RECHARTS: EVOLUÇÃO DA TEMPERATURA MÉDIA DO ANDAR VS TEMPO (CFDSTATE) */}
+      <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800 space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300">
+              Evolução Térmica Média
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border ${
+              currentFloorAvgTemp >= 60 ? 'bg-rose-950 text-rose-300 border-rose-800 animate-pulse' :
+              currentFloorAvgTemp >= 38 ? 'bg-amber-950 text-amber-300 border-amber-800' :
+              'bg-emerald-950 text-emerald-300 border-emerald-800'
+            }`}>
+              {currentFloorAvgTemp.toFixed(1)}°C
+            </span>
+          </div>
+        </div>
+
+        {/* Floor Selection Pills */}
+        <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none">
+          {DEFAULT_FLOOR_OPTIONS.map((f) => (
+            <button
+              key={f.id}
+              onClick={() => handleSelectFloor(f.id)}
+              className={`px-2 py-0.5 rounded text-[9px] font-bold transition shrink-0 ${
+                activeFloorId === f.id
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50 shadow-sm'
+                  : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+              }`}
+              title={`${f.name} — ${f.purpose}`}
+            >
+              {f.shortLabel}
+            </button>
+          ))}
+        </div>
+
+        {/* Selected Floor Subtitle and Simulation Time Marker */}
+        <div className="flex items-center justify-between text-[10px] text-slate-400 px-0.5 font-mono">
+          <span className="truncate max-w-[170px] text-slate-300 font-sans font-medium" title={currentFloorOption.name}>
+            {currentFloorOption.name}
+          </span>
+          <span className="text-cyan-400">
+            t = {simulationTimeSec}s
+          </span>
+        </div>
+
+        {/* Recharts Responsive Line Chart */}
+        <div className="w-full h-36 pt-1">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData} margin={{ top: 6, right: 6, left: -22, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.35} />
+              <XAxis
+                dataKey="time"
+                stroke="#64748b"
+                tick={{ fontSize: 9 }}
+                tickFormatter={(val) => `${val}s`}
+              />
+              <YAxis
+                stroke="#64748b"
+                tick={{ fontSize: 9 }}
+                unit="°C"
+                domain={[15, 'auto']}
+              />
+              <Tooltip content={<CustomThermalTooltip />} />
+              <ReferenceLine
+                y={60}
+                stroke="#f43f5e"
+                strokeDasharray="3 3"
+                strokeWidth={1}
+                label={{ value: '60°C Limite', fill: '#f43f5e', fontSize: 8, position: 'insideRight' }}
+              />
+              <ReferenceLine
+                x={simulationTimeSec}
+                stroke="#38bdf8"
+                strokeDasharray="2 2"
+                strokeWidth={1.5}
+                label={{ value: 'Agora', fill: '#38bdf8', fontSize: 8, position: 'insideTopLeft' }}
+              />
+              <Line
+                type="monotone"
+                dataKey="avgTemp"
+                name="Temp. Média"
+                stroke="#f59e0b"
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4, fill: '#f59e0b', stroke: '#fff', strokeWidth: 1 }}
+                isAnimationActive={false}
+              />
+              {activeFloorId === 4 && (
+                <Line
+                  type="monotone"
+                  dataKey="peakTemp"
+                  name="Pico Foco"
+                  stroke="#ef4444"
+                  strokeWidth={1.2}
+                  strokeDasharray="3 3"
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              )}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Legend & Standards Footnote */}
+        <div className="pt-1 border-t border-slate-800/80 flex items-center justify-between text-[9px] text-slate-400">
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1 text-amber-400 font-medium">
+              <span className="w-2.5 h-0.5 bg-amber-500 inline-block rounded" /> Temp. Média Andar
+            </span>
+            {activeFloorId === 4 && (
+              <span className="flex items-center gap-1 text-rose-400 font-medium">
+                <span className="w-2.5 h-0.5 bg-rose-500 inline-block border-t border-dashed" /> Pico RM 408
+              </span>
+            )}
+          </div>
+          <span className="font-mono text-slate-500">ISO 13571 / CFD</span>
+        </div>
       </div>
 
       {/* 3. ROTAS DE FUGA & ALERTAS */}

@@ -25,6 +25,8 @@ export interface GeolocationResult {
   timestamp: string;
   error?: string;
   requiresKey?: boolean;
+  isFallback?: boolean;
+  fallbackReason?: string;
 }
 
 export const KNOWN_HOSPITAL_PRESETS = [
